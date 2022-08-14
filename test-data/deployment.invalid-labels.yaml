@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: cool-app
+  name: cool-app
+  namespace: default
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: cool-app
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: cool-app
+    spec:
+      serviceAccountName: cool-app
+      securityContext:
+        runAsUser: 1001
+      initContainers:
+      - name: wait-for-something
+        image: kubectl:1.19
+        imagePullPolicy: IfNotPresent
+        command:
+        - bash
+        args:
+        - -c
+        - |
+          until [[ $(kubectl get deployments.apps -l=app=something -o jsonpath='{.items[0].status.readyReplicas}') -ge 1 ]]; do
+              echo "Waiting for something to be ready"
+              sleep 2
+          done
+      containers:
+      - name: cool-app
+        image: cool-org/cool-app:v0.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: server
+          containerPort: 8080
+        - name: metrics
+          containerPort: 9000
+        env:
+        - name: MY_CONFIG_FILE
+          value: config.yaml
+        securityContext:
+          allowPrivilegeEscalation: false
+          procMount: Default

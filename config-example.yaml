@@ -1,0 +1,32 @@
+---
+- {regex: '^---$', name: document-marker, operations: [{op: required, value: exactly-once}]}
+- {regex: '^apiVersion:\s\S', name: apiVersion, operations: [{op: after, value: document-marker}, {op: required, value: exactly-once}]}
+- {regex: '^kind:\s\S', name: kind, operations: [{op: after, value: apiVersion}, {op: required, value: exactly-once}]}
+- {regex: '^metadata:', name: metadata, operations: [{op: after, value: kind}, {op: required, value: 'true'}]}
+- {regex: '^  name:\s\S', name: metadataName, operations: [{op: after, value: metadata}, {op: required, value: 'true'}]}
+- {regex: '^  namespace:\s\S', name: metadataNamespace, operations: [{op: after, value: metadataName}]}
+- {regex: '^  labels:', name: metadataLabels, operations: [{op: after, value: metadataNamespace}, {op: required, value: 'true'}]}
+# TODO - {regex: '^    app:', name: metadataLabelsApp, operations: [{op: after, value: metadataLabels}, {op: required, value: 'true'}]}
+- {regex: '^  annotations:', name: metadataAnnotations, operations: [{op: after, value: metadataLabels}]}
+# - spec:
+# -   ...
+# -   template:
+# -     ...
+# -     spec:
+# -       ...
+# -       initContainers:
+# -       - name: wait-for-something
+# -         image: bitnami/kubectl:1.19
+# -         imagePullPolicy: IfNotPresent
+# -         command:
+# -         ...
+# -         args:
+# -         ...
+# -       containers:
+# -       - name: administration
+# -         image: cool-app:v0.0.0
+# -         imagePullPolicy: IfNotPresent
+# -         command:
+# -         ...
+# -         args:
+# -         ...
