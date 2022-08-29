@@ -1,0 +1,40 @@
+---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: default
+  labels:  # required
+    app: example-asdf  # first, required
+  annotations:
+spec:  # required
+  replicas: 1  # first
+  revisionHistoryLimit: 10
+  selector:  # required
+    matchLabels:
+      app: example  # first, required
+  strategy:
+    type: Recreate
+  template:
+    metadata:  # required
+      labels:  # required
+        app: example  # first, required
+    spec:
+      serviceAccountName: example  # first
+      securityContext:
+      initContainers:  # ditto: .spec.template.spec.containers
+      containers:
+      - name: example  # first, required
+        image: snarlysodboxer/some-app:latest  # required
+        imagePullPolicy: IfNotPresent  # required
+        command:
+        args:
+        envFrom:
+        env:
+        - name: EXAMPLE_VAR  # first, required
+        ports:
+        - name: server  # first, required
+        volumeMounts:
+        - name: my-config  # first, required
+      volumes:
+      - name: my-config  # first, required
