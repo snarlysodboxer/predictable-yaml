@@ -1,0 +1,17 @@
+---
+apiVersion: v1  # first, required
+kind: Service
+metadata:
+  name: example  # first, required
+  namespace: example
+  labels:
+    app: example  # first, required
+spec:
+  type: ClusterIP  # first, required
+  selector:
+    app: example  # first
+  ports:
+  - name: example  # first, required
+    protocol: TCP
+    port: 8080
+    targetPort: example

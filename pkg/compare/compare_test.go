@@ -1,4 +1,4 @@
-package main
+package compare
 
 import (
 	"fmt"
@@ -96,7 +96,7 @@ func TestWalkConvertYamlNodeToMainNode(t *testing.T) {
 
 	// do it
 	node := &Node{Node: yDocument}
-	walkConvertYamlNodeToMainNode(node)
+	WalkConvertYamlNodeToMainNode(node)
 
 	type testCase struct {
 		note                         string
@@ -231,29 +231,96 @@ func TestWalkConvertYamlNodeToMainNode(t *testing.T) {
 		// Node
 		//   confirm we didn't mess up the tests
 		if tc.confirmConfigNode != tc.expectedNode {
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.confirmConfigNode)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.confirmConfigNode)
 		}
 		if tc.gotNode != tc.expectedNode {
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.gotNode)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.gotNode)
 		}
 
 		// PreviousLineNode
 		switch {
 		case tc.gotPreviousLineNode != nil && tc.gotPreviousLineNode.Node != tc.expectedPreviousLineNode:
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, tc.gotPreviousLineNode.Node)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, tc.gotPreviousLineNode.Node)
 		case tc.gotPreviousLineNode == nil && tc.expectedPreviousLineNode != nil:
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, nil)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, nil)
 		}
 
 		// FollowingContentNode
 		switch {
 		case tc.gotFollowingContentNode != nil && tc.gotFollowingContentNode.Node != tc.expectedFollowingContentNode:
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, tc.gotFollowingContentNode.Node)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, tc.gotFollowingContentNode.Node)
 		case tc.gotFollowingContentNode == nil && tc.expectedFollowingContentNode != nil:
-			t.Errorf("Description: %s: main.walkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, nil)
+			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, nil)
 		}
 	}
 
+}
+
+func TestGetSchemaType(t *testing.T) {
+	type testCase struct {
+		note     string
+		yaml     string
+		expected string
+	}
+
+	testCases := []testCase{
+		{
+			note: "header comment kind generic",
+			yaml: `---
+# predictable-yaml-kind: generic
+kind: Deployment
+spec:
+  asdf`,
+			expected: "generic",
+		},
+		{
+			note: "line comment kind generic",
+			yaml: `---
+kind: Deployment  # predictable-yaml-kind: generic
+spec:
+  asdf`,
+			expected: "generic",
+		},
+		{
+			note: "footer comment kind generic",
+			yaml: `---
+kind: Deployment
+# predictable-yaml-kind: generic
+
+spec:
+  asdf`,
+			expected: "generic",
+		},
+		{
+			note: "regular kind deployment",
+			yaml: `---
+kind: Deployment
+spec:
+  asdf`,
+			expected: "Deployment",
+		},
+	}
+
+	for _, tc := range testCases {
+		// convert yaml
+		n := &yaml.Node{}
+		err := yaml.Unmarshal([]byte(tc.yaml), n)
+		if err != nil {
+			t.Fatalf("Description: main.GetSchemaType(...): failed unmarshaling config test data!")
+		}
+		node := &Node{Node: n}
+		WalkConvertYamlNodeToMainNode(node)
+
+		// do it
+		got, err := GetSchemaType(node)
+		if err != nil {
+			t.Errorf("Description: %s: main.GetSchemaType(...): \n-expected:\nno error\n+got:\n%#v\n", tc.note, err)
+			continue
+		}
+		if got != tc.expected {
+			t.Errorf("Description: %s: main.GetSchemaType(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expected, got)
+		}
+	}
 }
 
 func TestWalkToNodeForPath(t *testing.T) {
@@ -282,7 +349,7 @@ spec:
 		t.Fatalf("Description: main.walkToNodeForPath(...): failed unmarshaling config test data!")
 	}
 	node := &Node{Node: n}
-	walkConvertYamlNodeToMainNode(node)
+	WalkConvertYamlNodeToMainNode(node)
 
 	testCases := []testCase{
 		{
@@ -402,32 +469,32 @@ spec:  # first
 		n := &yaml.Node{}
 		err := yaml.Unmarshal([]byte(tc.yaml), n)
 		if err != nil {
-			t.Fatalf("Description: %s: main.walkParseLoadConfigComments(...): failed unmarshaling test data!\n\t%v", tc.note, err)
+			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): failed unmarshaling test data!\n\t%v", tc.note, err)
 		}
 
 		node := &Node{Node: n}
-		walkConvertYamlNodeToMainNode(node)
-		walkParseLoadConfigComments(node)
+		WalkConvertYamlNodeToMainNode(node)
+		WalkParseLoadConfigComments(node)
 
 		// find node to test via path
 		splitPath := strings.Split(tc.path, ".")
 		childNode, err := walkToNodeForPath(node, splitPath, 0)
 		if err != nil {
-			t.Fatalf("Description: %s: main.walkParseLoadConfigComments(...): expected: no error, got: %#v", tc.note, err)
+			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): expected: no error, got: %#v", tc.note, err)
 		}
 		if childNode == nil {
-			t.Fatalf("Description: %s: main.walkParseLoadConfigComments(...): failed finding test data node path!", tc.note)
+			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): failed finding test data node path!", tc.note)
 		}
 
 		// do it
 		if childNode.MustBeFirst != tc.first {
-			t.Errorf("Description: %s: main.walkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.first, childNode.MustBeFirst)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.first, childNode.MustBeFirst)
 		}
 		if childNode.Required != tc.required {
-			t.Errorf("Description: %s: main.walkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.required, childNode.Required)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.required, childNode.Required)
 		}
 		if childNode.Ditto != tc.ditto {
-			t.Errorf("Description: %s: main.walkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.ditto, childNode.Ditto)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.ditto, childNode.Ditto)
 		}
 	}
 }
@@ -519,7 +586,7 @@ spec:
 			t.Fatalf("Description: %s: main.getReferencePath(...): failed unmarshaling test data!", tc.note)
 		}
 		node := &Node{Node: n}
-		walkConvertYamlNodeToMainNode(node)
+		WalkConvertYamlNodeToMainNode(node)
 
 		// find node to test via path
 		splitPath := strings.Split(tc.path, ".")
@@ -723,28 +790,28 @@ spec:
 		cN := &yaml.Node{}
 		err := yaml.Unmarshal([]byte(tc.configYaml), cN)
 		if err != nil {
-			t.Errorf("Description: %s: main.walkAndCompare(...): failed unmarshaling config test data!", tc.note)
+			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling config test data!", tc.note)
 			continue
 		}
 		configNode := &Node{Node: cN}
-		walkConvertYamlNodeToMainNode(configNode)
-		walkParseLoadConfigComments(configNode)
+		WalkConvertYamlNodeToMainNode(configNode)
+		WalkParseLoadConfigComments(configNode)
 
 		fN := &yaml.Node{}
 		err = yaml.Unmarshal([]byte(tc.fileYaml), fN)
 		if err != nil {
-			t.Errorf("Description: %s: main.walkAndCompare(...): failed unmarshaling file test data!", tc.note)
+			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling file test data!", tc.note)
 			continue
 		}
 		fileNode := &Node{Node: fN}
-		walkConvertYamlNodeToMainNode(fileNode)
+		WalkConvertYamlNodeToMainNode(fileNode)
 
 		// do it
-		gotErrs := walkAndCompare(configNode, fileNode, ValidationErrors{})
-		expected := getValidationErrorStrings(tc.expectedErrs)
-		got := getValidationErrorStrings(gotErrs)
+		gotErrs := WalkAndCompare(configNode, fileNode, ValidationErrors{})
+		expected := GetValidationErrorStrings(tc.expectedErrs)
+		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {
-			t.Errorf("Description: %s: main.walkAndCompare(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
+			t.Errorf("Description: %s: main.WalkAndCompare(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
 			continue
 		}
 	}
