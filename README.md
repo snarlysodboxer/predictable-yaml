@@ -9,6 +9,7 @@ This is an early work in progress, not ready for use yet.
 Examples:
 * `find test-data -name '*\.yaml' | go run main.go --config-dir example-configs`
 * `find test-data -name '*\.valid.yaml' | go run main.go --config-dir example-configs --quiet`
+* `find test-data -name '*.yaml' | docker run -i --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest --config-dir example-configs`
 
 ## Algorithm
 * Indentation must match, between the config file and target files.
