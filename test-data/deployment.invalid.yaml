@@ -23,11 +23,11 @@ spec:
       securityContext:
         runAsUser: 1001
       initContainers:
-      - name: wait-for-something
+      - command:
+        - bash
         image: kubectl:1.19
         imagePullPolicy: IfNotPresent
-        command:
-        - bash
+        name: wait-for-something
         args:
         - -c
         - |

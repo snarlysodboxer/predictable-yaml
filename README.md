@@ -7,13 +7,9 @@ This is an early work in progress, not ready for use yet.
 * `go run main.go --help`
 
 Examples:
-* `echo test-data/deployment.valid.yaml | go run main.go`
-* `echo test-data/deployment.invalid-labels.yaml | go run main.go`
-* Or:
-```shell
-echo 'test-data/deployment.valid.yaml
-test-data/deployment.invalid-labels.yaml' | go run main.go
-```
+* `find test-data -name '*\.yaml' | go run main.go --config-dir example-configs`
+* `find test-data -name '*\.valid.yaml' | go run main.go --config-dir example-configs --quiet`
+
 ## Algorithm
 * Indentation must match, between the config file and target files.
 * For each line in the config file, find any matching target file lines and validate, recursively.
@@ -24,7 +20,14 @@ test-data/deployment.invalid-labels.yaml' | go run main.go
 * Lines set to `none` are cataloged as needed but have no other requirements. This is useful when a key is not required, but if it's included, certain sub-keys should be required.
 
 ## Config files
+* Supports multiple config schema files. Place them in the config directory.
+    * Config type can be configured with the comment `# predictable-yaml-kind: my-schema`.
+        * If this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value.
+    * Target file type will be determined in the same way.
 * Must not have comments other than the configuration ones specific to this program.
 * Set `first` to throw errors if a key is not first.
 * Set `required` to throw errors if a key is not found.
 * Set `ditto` to setup a key and sub-keys with the same configs as another key and sub-keys.
+
+## Test
+* Run with `go test ./...`.
