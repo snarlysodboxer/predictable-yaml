@@ -5,6 +5,7 @@ metadata:
   name: cool-app
   namespace: default
   labels:
+    # want to be able to have comment here
     app: cool-app
 spec:
   replicas: 1
@@ -39,14 +40,28 @@ spec:
       - name: cool-app
         image: cool-org/cool-app:v0.0.0
         imagePullPolicy: IfNotPresent
+        env:
+        - name: MY_CONFIG_FILE
+          value: config.yaml
+        securityContext:
+          allowPrivilegeEscalation: false
+          procMount: Default
         ports:
         - name: server
           containerPort: 8080
         - name: metrics
           containerPort: 9000
+      - name: coolness-app
+        image: cool-org/coolness-app:v0.0.0
+        imagePullPolicy: IfNotPresent
         env:
         - name: MY_CONFIG_FILE
           value: config.yaml
+        ports:
+        - name: server
+          containerPort: 8081
+        - name: metrics
+          containerPort: 9001
         securityContext:
           allowPrivilegeEscalation: false
           procMount: Default
