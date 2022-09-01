@@ -783,6 +783,25 @@ spec:
         args:
         - asdf`,
 		},
+		{
+			note:         "ignore requireds 1",
+			expectedErrs: ValidationErrors{},
+			configYaml: `---
+spec:  # first
+  template:  # required
+    spec:  # first, required
+      initContainers:  # ditto: .spec.template.spec.containers
+      containers:
+      - name: cool-app  # first, required
+        command:
+        - asdf
+        args:
+        - asdf`,
+			fileYaml: `---
+# predictable-yaml-configs: ignore-requireds
+spec:
+  template: {}`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -805,9 +824,10 @@ spec:
 		}
 		fileNode := &Node{Node: fN}
 		WalkConvertYamlNodeToMainNode(fileNode)
+		ignoreRequireds := GetIgnoreRequireds(fileNode)
 
 		// do it
-		gotErrs := WalkAndCompare(configNode, fileNode, ValidationErrors{})
+		gotErrs := WalkAndCompare(configNode, fileNode, ignoreRequireds, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {

@@ -22,7 +22,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"github.com/spf13/cobra"
@@ -92,9 +94,10 @@ var rootCmd = &cobra.Command{
 				log.Printf("WARNING: no config found for schema '%s'\n", name)
 				continue
 			}
+			ignoreRequireds := compare.GetIgnoreRequireds(fileNode)
 
 			// do it
-			errs := compare.WalkAndCompare(configNode, fileNode, compare.ValidationErrors{})
+			errs := compare.WalkAndCompare(configNode, fileNode, ignoreRequireds, compare.ValidationErrors{})
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
@@ -126,6 +129,10 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgDir, "config-dir", "~/.predictable-yaml", "directory containing config file(s), (default is $HOME/.predictable-yaml)")
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "output nothing, unless there are failures")
+	if strings.HasPrefix(cfgDir, "~/") {
+		dirname, _ := os.UserHomeDir()
+		cfgDir = filepath.Join(dirname, cfgDir[2:])
+	}
 }
 
 func getFilePathsFromStdin() ([]string, error) {

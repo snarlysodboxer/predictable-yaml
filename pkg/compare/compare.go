@@ -57,6 +57,30 @@ func GetSchemaType(node *Node) (string, error) {
 	return "", fmt.Errorf("error: unable to find a schema type")
 }
 
+// GetIgnoreRequireds
+func GetIgnoreRequireds(node *Node) bool {
+	// check config comment
+	for _, n := range node.NodeContent[0].NodeContent {
+		for _, comment := range []string{n.HeadComment, n.LineComment, n.FootComment} {
+			if comment != "" {
+				comment = strings.ReplaceAll(comment, "#", "")
+				comment = strings.ReplaceAll(comment, " ", "")
+				if strings.Contains(comment, "predictable-yaml-configs:") {
+					splitStrings := strings.Split(comment, ",")
+					for _, str := range splitStrings {
+						s := strings.Split(str, ":")[1]
+						if s == "ignore-requireds" {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 func parseSchemaType(comment string) string {
 	comment = strings.ReplaceAll(comment, "#", "")
 	comment = strings.ReplaceAll(comment, " ", "")
@@ -121,13 +145,13 @@ func WalkParseLoadConfigComments(node *Node) {
 }
 
 // WalkAndCompare walks the tree and does the validation
-func WalkAndCompare(configNode, fileNode *Node, errs ValidationErrors) ValidationErrors {
+func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs ValidationErrors) ValidationErrors {
 	switch configNode.Kind {
 	case yaml.DocumentNode:
 		if fileNode.Kind != yaml.DocumentNode {
 			return append(errs, fmt.Errorf("program error: expected file node to be Document: %v", fileNode))
 		}
-		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], errs)
+		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], ignoreRequireds, errs)
 	case yaml.MappingNode:
 		if fileNode.Kind != yaml.MappingNode {
 			return append(errs, fmt.Errorf("program error: expected file node to be Map: %v", fileNode))
@@ -146,13 +170,13 @@ func WalkAndCompare(configNode, fileNode *Node, errs ValidationErrors) Validatio
 			found := false
 			for _, innerFileNode := range fileNode.NodeContent {
 				if innerFileNode.Kind == yaml.ScalarNode && innerConfigNode.Value == innerFileNode.Value {
-					errs = WalkAndCompare(innerConfigNode, innerFileNode, errs)
+					errs = WalkAndCompare(innerConfigNode, innerFileNode, ignoreRequireds, errs)
 					found = true
 					break
 				}
 			}
 			// check required
-			if !found && innerConfigNode.Required {
+			if !found && innerConfigNode.Required && !ignoreRequireds {
 				path := fmt.Sprintf("%s.%s", getReferencePath(fileNode, 0, ""), innerConfigNode.Value)
 				errs = append(errs, fmt.Errorf("validation error: missing required key '%s'", path))
 			}
@@ -163,7 +187,7 @@ func WalkAndCompare(configNode, fileNode *Node, errs ValidationErrors) Validatio
 		}
 		for _, fNode := range fileNode.NodeContent {
 			// use the same configNode for each entry in the sequence
-			errs = WalkAndCompare(configNode.NodeContent[0], fNode, errs)
+			errs = WalkAndCompare(configNode.NodeContent[0], fNode, ignoreRequireds, errs)
 		}
 	case yaml.ScalarNode:
 		if fileNode.Kind != yaml.ScalarNode {
@@ -187,7 +211,7 @@ func WalkAndCompare(configNode, fileNode *Node, errs ValidationErrors) Validatio
 			if err != nil {
 				errs = append(errs, err)
 			} else {
-				errs = append(errs, WalkAndCompare(cN, fileNode, errs)...)
+				errs = append(errs, WalkAndCompare(cN, fileNode, ignoreRequireds, errs)...)
 			}
 		}
 
@@ -204,7 +228,7 @@ func WalkAndCompare(configNode, fileNode *Node, errs ValidationErrors) Validatio
 			return append(errs, fmt.Errorf("validation error: want '%s' to be a %s node, got '%s'", configPath, kindToString(configNode.FollowingContentNode.Kind), kindToString(fileNode.FollowingContentNode.Kind)))
 		}
 
-		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, errs)
+		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, ignoreRequireds, errs)
 	default:
 		return append(errs, fmt.Errorf("did not expect configNode.Kind of: %v", fileNode.Kind))
 	}
