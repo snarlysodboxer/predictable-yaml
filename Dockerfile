@@ -5,6 +5,6 @@ RUN go mod download
 COPY . .
 RUN GOOS=linux CGO_ENABLED=0 go build -o /predictable-yaml
 
-FROM scratch AS app
+FROM alpine:3.16 AS app
 COPY --from=builder /predictable-yaml /predictable-yaml
 ENTRYPOINT ["/predictable-yaml"]
