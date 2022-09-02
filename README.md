@@ -28,7 +28,7 @@ Examples:
 * Set `# first` to throw errors if a key is not first.
 * Set `# required` to throw errors if a key is not found.
 * Set `# ditto` to setup a key and sub-keys with the same configs as another key and sub-keys.
-* Set any combination of these like `# first, required, ditto`.
+* Set any combination of these like `# first, required, ditto=.spec.template.spec.containers[0].livenessProbe`.
 
 ## Configuring per file overrides
 __Config comments in target files must be before, inline, or after the first line of yaml (not just at the top of the file.)__

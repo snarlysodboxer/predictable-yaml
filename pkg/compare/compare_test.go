@@ -17,7 +17,6 @@ package compare
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -376,27 +375,26 @@ spec:
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0],
 		},
 		{
-			path:         ".spec.template.spec.containers.0",
+			path:         ".spec.template.spec.containers[0]",
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0],
 		},
 		{
-			path:         ".spec.template.spec.containers.0.name",
+			path:         ".spec.template.spec.containers[0].name",
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[0],
 		},
 		{
-			path:         ".spec.template.spec.containers.0.command",
+			path:         ".spec.template.spec.containers[0].command",
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[2],
 		},
 		{
-			path:         ".spec.template.spec.containers.0.command.1",
+			path:         ".spec.template.spec.containers[0].command[1]",
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[3].NodeContent[1],
 		},
 	}
 
 	for _, tc := range testCases {
 		// do it
-		splitPath := strings.Split(tc.path, ".")
-		gotNode, err := walkToNodeForPath(node, splitPath, 0)
+		gotNode, err := walkToNodeForPath(node, tc.path, 0)
 		if err != nil {
 			t.Errorf("Description: %s: main.walkToNodeForPath(...): \n-expected:\nno error\n+got:\n%#v\n", tc.path, err)
 		}
@@ -423,7 +421,7 @@ func TestWalkParseLoadConfigComments(t *testing.T) {
 spec:  # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -458,7 +456,7 @@ spec:  # first
 			ditto:    "",
 		},
 		{
-			note:     ".spec.template.spec.initContainers: ditto: .spec.template.spec.containers",
+			note:     ".spec.template.spec.initContainers: ditto=.spec.template.spec.containers",
 			yaml:     testYamlContainers,
 			path:     ".spec.template.spec.initContainers",
 			first:    false,
@@ -488,8 +486,7 @@ spec:  # first
 		WalkParseLoadConfigComments(node)
 
 		// find node to test via path
-		splitPath := strings.Split(tc.path, ".")
-		childNode, err := walkToNodeForPath(node, splitPath, 0)
+		childNode, err := walkToNodeForPath(node, tc.path, 0)
 		if err != nil {
 			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): expected: no error, got: %#v", tc.note, err)
 		}
@@ -565,13 +562,13 @@ spec:
 		},
 		{
 			note:     ".spec.template.spec.containers[0].name",
-			path:     ".spec.template.spec.containers.0.name",
+			path:     ".spec.template.spec.containers[0].name",
 			expected: ".spec.template.spec.containers[0].name",
 			yaml:     testYamlContainers,
 		},
 		{
 			note:     ".spec.template.spec.containers[1].command[2]",
-			path:     ".spec.template.spec.containers.1.command.2",
+			path:     ".spec.template.spec.containers[1].command[2]",
 			expected: ".spec.template.spec.containers[1].command[2]",
 			yaml:     testYamlContainers,
 		},
@@ -600,8 +597,7 @@ spec:
 		WalkConvertYamlNodeToMainNode(node)
 
 		// find node to test via path
-		splitPath := strings.Split(tc.path, ".")
-		childNode, err := walkToNodeForPath(node, splitPath, 0)
+		childNode, err := walkToNodeForPath(node, tc.path, 0)
 		if err != nil {
 			t.Fatalf("Description: %s: main.getReferencePath(...): expected: no error, got: %#v", tc.note, err)
 		}
@@ -634,7 +630,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -665,7 +661,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required`,
 			fileYaml: `---
@@ -691,7 +687,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -715,7 +711,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -742,7 +738,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -781,7 +777,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -807,6 +803,48 @@ spec:
         - asdf`,
 		},
 		{
+			note: "ditto 2",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet' to be after '.spec.template.spec.containers[0].readinessProbe.periodSeconds', is before"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.path' to be after '.spec.template.spec.containers[0].readinessProbe.httpGet.port', is before"),
+			},
+			configYaml: `---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          periodSeconds: 10  # first, required
+          httpGet:
+            port: http  # first, required
+            path: /
+            scheme: HTTP
+        readinessProbe:  # ditto=.spec.template.spec.containers[0].livenessProbe`,
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: uncool-app
+        livenessProbe:
+          periodSeconds: 10
+          httpGet:
+            port: http
+            path: /
+            scheme: HTTP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          periodSeconds: 10`,
+		},
+		{
 			note:         "overrides 1",
 			expectedErrs: ValidationErrors{},
 			configYaml: `---
@@ -814,7 +852,7 @@ spec:
 spec: # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -834,7 +872,7 @@ spec:
 spec: # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -845,6 +883,27 @@ spec: # first
 # predictable-yaml: ignore
 spec:
   template: {}`,
+		},
+		{
+			note:         "first doesn't count if not required and non existent",
+			expectedErrs: ValidationErrors{},
+			configYaml: `---
+kind: Deployment  # first
+spec:
+  template:  # required
+    spec:  # first
+      initContainers:  # ditto=.spec.template.spec.containers
+      containers:
+      - name: cool-app  # first, required
+        command:
+        - asdf
+        args:
+        - asdf`,
+			fileYaml: `---
+kind: Deployment  # first
+spec:
+  template:
+    asdf: []`,
 		},
 	}
 
