@@ -138,7 +138,7 @@ func WalkParseLoadConfigComments(node *Node) {
 			case str == "required":
 				n.Required = true
 			case strings.Contains(str, "ditto"):
-				n.Ditto = strings.Split(str, ":")[1]
+				n.Ditto = strings.Split(str, "=")[1]
 			}
 		}
 	}
@@ -210,7 +210,7 @@ func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs Va
 		// check 'ditto'
 		if configNode.Ditto != "" {
 			rootNode := walkToRootNode(configNode)
-			cN, err := walkToNodeForPath(rootNode, strings.Split(configNode.Ditto, "."), 0)
+			cN, err := walkToNodeForPath(rootNode, configNode.Ditto, 0)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -279,13 +279,17 @@ func walkToRootNode(node *Node) *Node {
 	return node
 }
 
-func walkToNodeForPath(node *Node, path []string, currentPathIndex int) (*Node, error) {
-	if currentPathIndex+1 > len(path) {
+func walkToNodeForPath(node *Node, path string, currentPathIndex int) (*Node, error) {
+	p := strings.Replace(path, `[`, `.`, -1)
+	p = strings.Replace(p, `]`, ``, -1)
+	splitPath := strings.Split(p, ".")
+
+	if currentPathIndex+1 > len(splitPath) {
 		return nil, fmt.Errorf("index out of bounds: %d", currentPathIndex)
 	}
 
-	currentPathValue := path[currentPathIndex]
-	isPathEnd := currentPathIndex+1 == len(path)
+	currentPathValue := splitPath[currentPathIndex]
+	isPathEnd := currentPathIndex+1 == len(splitPath)
 	switch node.Kind {
 	case yaml.DocumentNode:
 		if currentPathValue != "" {
@@ -326,7 +330,7 @@ func walkToNodeForPath(node *Node, path []string, currentPathIndex int) (*Node, 
 		}
 	}
 
-	return nil, fmt.Errorf("configuration error: '%s' configuration node not found", strings.Join(path, "."))
+	return nil, fmt.Errorf("configuration error: '%s' configuration node not found", path)
 }
 
 func firstScalarOfLine(node *Node) *Node {

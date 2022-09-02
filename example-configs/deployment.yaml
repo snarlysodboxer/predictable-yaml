@@ -22,7 +22,7 @@ spec:  # required
     spec:
       serviceAccountName: example  # first
       securityContext:
-      initContainers:  # ditto: .spec.template.spec.containers
+      initContainers:  # ditto=.spec.template.spec.containers
       containers:
       - name: example  # first, required
         image: snarlysodboxer/some-app:latest  # required
