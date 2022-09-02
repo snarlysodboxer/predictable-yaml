@@ -1,3 +1,18 @@
+/*
+Copyright © 2022 david amick git@davidamick.com
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package compare
 
 import (
@@ -13,7 +28,7 @@ type Node struct {
 	*yaml.Node
 	NodeContent          []*Node
 	ParentNode           *Node
-	PreviousLineNode     *Node // only lead Scalar lines in the same parent node
+	PreviousLineNode     *Node // only leading Scalar lines in the same parent node
 	FollowingContentNode *Node // only Mapping and Sequence nodes following Scalar nodes
 	Index                int
 	MustBeFirst          bool
@@ -27,71 +42,59 @@ type ConfigMap map[string]*Node
 // ValidationErrors allows us to return multiple validation errors
 type ValidationErrors []error
 
-// GetSchemaType
-func GetSchemaType(node *Node) (string, error) {
-	// check config comment
+// FileConfigs supports kind and overrides
+type FileConfigs struct {
+	Kind            string // config and target files
+	Ignore          bool   // target files only
+	IgnoreRequireds bool   // target files only
+}
+
+// GetFileConfigs parses comments for config info
+func GetFileConfigs(node *Node) FileConfigs {
+	fileConfigs := FileConfigs{}
+	// check config comments
 	for _, n := range node.NodeContent[0].NodeContent {
 		for _, comment := range []string{n.HeadComment, n.LineComment, n.FootComment} {
-			if comment != "" {
-				name := parseSchemaType(comment)
-				if name != "" {
-					return name, nil
+			if comment == "" {
+				continue
+			}
+			if !strings.Contains(comment, "predictable-yaml:") {
+				continue
+			}
+			comment = strings.ReplaceAll(comment, "#", "")
+			comment = strings.ReplaceAll(comment, " ", "")
+			comment = strings.Split(comment, ":")[1]
+			splitStrings := strings.Split(comment, ",")
+			for _, str := range splitStrings {
+				switch {
+				case str == "ignore":
+					fileConfigs.Ignore = true
+				case str == "ignore-requireds":
+					fileConfigs.IgnoreRequireds = true
+				case strings.Contains(str, "kind"):
+					fileConfigs.Kind = strings.Split(str, "=")[1]
 				}
 			}
 		}
 	}
 
 	// check Kubernetes-esq Kind
-	for index, n := range node.NodeContent[0].NodeContent {
-		if n.Value == "kind" {
-			if index+1 <= (len(node.NodeContent[0].NodeContent) - 1) {
-				valueNode := node.NodeContent[0].NodeContent[index+1]
-				if valueNode.Line != n.Line {
-					continue
-				}
-				return valueNode.Value, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("error: unable to find a schema type")
-}
-
-// GetIgnoreRequireds
-func GetIgnoreRequireds(node *Node) bool {
-	// check config comment
-	for _, n := range node.NodeContent[0].NodeContent {
-		for _, comment := range []string{n.HeadComment, n.LineComment, n.FootComment} {
-			if comment != "" {
-				comment = strings.ReplaceAll(comment, "#", "")
-				comment = strings.ReplaceAll(comment, " ", "")
-				if strings.Contains(comment, "predictable-yaml-configs:") {
-					splitStrings := strings.Split(comment, ",")
-					for _, str := range splitStrings {
-						s := strings.Split(str, ":")[1]
-						if s == "ignore-requireds" {
-							return true
-						}
+	if fileConfigs.Kind == "" {
+		for index, n := range node.NodeContent[0].NodeContent {
+			if n.Value == "kind" {
+				if index+1 <= (len(node.NodeContent[0].NodeContent) - 1) {
+					valueNode := node.NodeContent[0].NodeContent[index+1]
+					if valueNode.Line != n.Line {
+						continue
 					}
+					fileConfigs.Kind = valueNode.Value
 				}
+				break
 			}
 		}
 	}
 
-	return false
-}
-
-func parseSchemaType(comment string) string {
-	comment = strings.ReplaceAll(comment, "#", "")
-	comment = strings.ReplaceAll(comment, " ", "")
-	splitStrings := strings.Split(comment, ",")
-	for _, str := range splitStrings {
-		if strings.Contains(str, "predictable-yaml-kind") {
-			return strings.Split(str, ":")[1]
-		}
-	}
-
-	return ""
+	return fileConfigs
 }
 
 // WalkConvertYamlNodeToMainNode converts every *yaml.Node to a *main.Node with our customizations
@@ -145,13 +148,13 @@ func WalkParseLoadConfigComments(node *Node) {
 }
 
 // WalkAndCompare walks the tree and does the validation
-func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs ValidationErrors) ValidationErrors {
+func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs ValidationErrors) ValidationErrors {
 	switch configNode.Kind {
 	case yaml.DocumentNode:
 		if fileNode.Kind != yaml.DocumentNode {
 			return append(errs, fmt.Errorf("program error: expected file node to be Document: %v", fileNode))
 		}
-		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], ignoreRequireds, errs)
+		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], fileConfigs, errs)
 	case yaml.MappingNode:
 		if fileNode.Kind != yaml.MappingNode {
 			return append(errs, fmt.Errorf("program error: expected file node to be Map: %v", fileNode))
@@ -170,13 +173,13 @@ func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs Valid
 			found := false
 			for _, innerFileNode := range fileNode.NodeContent {
 				if innerFileNode.Kind == yaml.ScalarNode && innerConfigNode.Value == innerFileNode.Value {
-					errs = WalkAndCompare(innerConfigNode, innerFileNode, ignoreRequireds, errs)
+					errs = WalkAndCompare(innerConfigNode, innerFileNode, fileConfigs, errs)
 					found = true
 					break
 				}
 			}
-			// check required
-			if !found && innerConfigNode.Required && !ignoreRequireds {
+			// check 'required'
+			if !found && innerConfigNode.Required && !fileConfigs.IgnoreRequireds {
 				path := fmt.Sprintf("%s.%s", getReferencePath(fileNode, 0, ""), innerConfigNode.Value)
 				errs = append(errs, fmt.Errorf("validation error: missing required key '%s'", path))
 			}
@@ -187,7 +190,7 @@ func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs Valid
 		}
 		for _, fNode := range fileNode.NodeContent {
 			// use the same configNode for each entry in the sequence
-			errs = WalkAndCompare(configNode.NodeContent[0], fNode, ignoreRequireds, errs)
+			errs = WalkAndCompare(configNode.NodeContent[0], fNode, fileConfigs, errs)
 		}
 	case yaml.ScalarNode:
 		if fileNode.Kind != yaml.ScalarNode {
@@ -211,7 +214,7 @@ func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs Valid
 			if err != nil {
 				errs = append(errs, err)
 			} else {
-				errs = append(errs, WalkAndCompare(cN, fileNode, ignoreRequireds, errs)...)
+				errs = append(errs, WalkAndCompare(cN, fileNode, fileConfigs, errs)...)
 			}
 		}
 
@@ -228,7 +231,7 @@ func WalkAndCompare(configNode, fileNode *Node, ignoreRequireds bool, errs Valid
 			return append(errs, fmt.Errorf("validation error: want '%s' to be a %s node, got '%s'", configPath, kindToString(configNode.FollowingContentNode.Kind), kindToString(fileNode.FollowingContentNode.Kind)))
 		}
 
-		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, ignoreRequireds, errs)
+		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, fileConfigs, errs)
 	default:
 		return append(errs, fmt.Errorf("did not expect configNode.Kind of: %v", fileNode.Kind))
 	}
