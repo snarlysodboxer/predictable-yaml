@@ -50,7 +50,7 @@ var rootCmd = &cobra.Command{
 			if file.IsDir() {
 				continue
 			}
-			re := regexp.MustCompile(`.*\.yaml$`)
+			re := regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
 			if !re.MatchString(file.Name()) {
 				continue
 			}
@@ -58,19 +58,19 @@ var rootCmd = &cobra.Command{
 			path := fmt.Sprintf("%s/%s", cfgDir, file.Name())
 			err := getYAML(cNode, path)
 			if err != nil {
-				log.Fatalf("error getting config: %v", err)
+				log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
 			}
 			configNode := &compare.Node{Node: cNode}
 			compare.WalkConvertYamlNodeToMainNode(configNode)
 			compare.WalkParseLoadConfigComments(configNode)
-			name, err := compare.GetSchemaType(configNode)
-			if err != nil {
-				log.Fatalf("error getting file schema: %s: %v", path, err)
+			fileConfigs := compare.GetFileConfigs(configNode)
+			if fileConfigs.Kind == "" {
+				log.Fatalf("error determining schema for config file: %s: %v", path, err)
 			}
-			configMap[name] = configNode
+			configMap[fileConfigs.Kind] = configNode
 		}
 
-		// read files to check, loop and check
+		// read files to check; loop and check
 		filePaths, err := getFilePathsFromStdin()
 		if err != nil {
 			log.Fatal(err)
@@ -81,23 +81,25 @@ var rootCmd = &cobra.Command{
 			fNode := &yaml.Node{}
 			err := getYAML(fNode, filePath)
 			if err != nil {
-				log.Fatalf("error getting file: %s: %v", filePath, err)
+				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
 			}
 			fileNode := &compare.Node{Node: fNode}
 			compare.WalkConvertYamlNodeToMainNode(fileNode)
-			name, err := compare.GetSchemaType(fileNode)
-			if err != nil {
-				log.Fatalf("error getting file schema: %s: %v", filePath, err)
-			}
-			configNode, ok := configMap[name]
-			if !ok {
-				log.Printf("WARNING: no config found for schema '%s'\n", name)
+			fileConfigs := compare.GetFileConfigs(fileNode)
+			if fileConfigs.Ignore {
 				continue
 			}
-			ignoreRequireds := compare.GetIgnoreRequireds(fileNode)
+			if fileConfigs.Kind == "" {
+				log.Fatalf("error: unable to determine a schema for target file: %s", filePath)
+			}
+			configNode, ok := configMap[fileConfigs.Kind]
+			if !ok {
+				log.Printf("WARNING: no config found for schema '%s' in file: %s", fileConfigs.Kind, filePath)
+				continue
+			}
 
 			// do it
-			errs := compare.WalkAndCompare(configNode, fileNode, ignoreRequireds, compare.ValidationErrors{})
+			errs := compare.WalkAndCompare(configNode, fileNode, fileConfigs, compare.ValidationErrors{})
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))

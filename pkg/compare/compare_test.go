@@ -1,3 +1,18 @@
+/*
+Copyright © 2022 david amick git@davidamick.com
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package compare
 
 import (
@@ -267,7 +282,7 @@ func TestGetSchemaType(t *testing.T) {
 		{
 			note: "header comment kind generic",
 			yaml: `---
-# predictable-yaml-kind: generic
+# predictable-yaml: kind=generic,ignore-requireds
 kind: Deployment
 spec:
   asdf`,
@@ -276,7 +291,7 @@ spec:
 		{
 			note: "line comment kind generic",
 			yaml: `---
-kind: Deployment  # predictable-yaml-kind: generic
+kind: Deployment  # predictable-yaml: kind=generic
 spec:
   asdf`,
 			expected: "generic",
@@ -285,7 +300,7 @@ spec:
 			note: "footer comment kind generic",
 			yaml: `---
 kind: Deployment
-# predictable-yaml-kind: generic
+# predictable-yaml: kind=generic
 
 spec:
   asdf`,
@@ -306,19 +321,15 @@ spec:
 		n := &yaml.Node{}
 		err := yaml.Unmarshal([]byte(tc.yaml), n)
 		if err != nil {
-			t.Fatalf("Description: main.GetSchemaType(...): failed unmarshaling config test data!")
+			t.Fatalf("Description: main.GetFileConfigs(...): failed unmarshaling config test data!")
 		}
 		node := &Node{Node: n}
 		WalkConvertYamlNodeToMainNode(node)
 
 		// do it
-		got, err := GetSchemaType(node)
-		if err != nil {
-			t.Errorf("Description: %s: main.GetSchemaType(...): \n-expected:\nno error\n+got:\n%#v\n", tc.note, err)
-			continue
-		}
-		if got != tc.expected {
-			t.Errorf("Description: %s: main.GetSchemaType(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expected, got)
+		got := GetFileConfigs(node)
+		if got.Kind != tc.expected {
+			t.Errorf("Description: %s: main.GetFileConfigs(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expected, got)
 		}
 	}
 }
@@ -619,7 +630,8 @@ func TestWalkAndCompare(t *testing.T) {
 			note:         "all in order",
 			expectedErrs: ValidationErrors{},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -630,6 +642,7 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
+kind: Deployment
 spec:
   template:
     spec:
@@ -648,13 +661,15 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[1].name' to be first, got '.spec.template.spec.containers[1].command'"),
 			},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
       containers:
       - name: cool-app  # first, required`,
 			fileYaml: `---
+kind: Deployment
 spec:
   template:
     spec:
@@ -672,7 +687,8 @@ spec:
 				fmt.Errorf("validation error: missing required key '.spec.template.spec'"),
 			},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -683,6 +699,7 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
+kind: Deployment
 spec:
   template:
     asdrf:
@@ -694,7 +711,8 @@ spec:
 				fmt.Errorf("validation error: missing required key '.spec.template.spec.containers[0].name'"),
 			},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -705,6 +723,7 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
+kind: Deployment
 spec:
   template:
     spec:
@@ -719,7 +738,8 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].args' to be after '.spec.template.spec.containers[0].command', is before"),
 			},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -730,6 +750,7 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
+kind: Deployment
 # this is that
 spec:
   template:
@@ -756,7 +777,8 @@ spec:
 				fmt.Errorf("validation error: missing required key '.spec.template.spec.initContainers[1].name'"),
 			},
 			configYaml: `---
-spec:  # first
+kind: Deployment # first
+spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -767,6 +789,7 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
+kind: Deployment
 spec:
   template:
     spec:
@@ -784,10 +807,11 @@ spec:
         - asdf`,
 		},
 		{
-			note:         "ignore requireds 1",
+			note:         "overrides 1",
 			expectedErrs: ValidationErrors{},
 			configYaml: `---
-spec:  # first
+# predictable-yaml: kind=Deployment
+spec: # first
   template:  # required
     spec:  # first, required
       initContainers:  # ditto: .spec.template.spec.containers
@@ -798,7 +822,27 @@ spec:  # first
         args:
         - asdf`,
 			fileYaml: `---
-# predictable-yaml-configs: ignore-requireds
+# predictable-yaml: ignore-requireds, kind=Deployment
+spec:
+  template: {}`,
+		},
+		{
+			note:         "overrides ignore",
+			expectedErrs: ValidationErrors{},
+			configYaml: `---
+# predictable-yaml: kind=Deployment
+spec: # first
+  template:  # required
+    spec:  # first, required
+      initContainers:  # ditto: .spec.template.spec.containers
+      containers:
+      - name: cool-app  # first, required
+        command:
+        - asdf
+        args:
+        - asdf`,
+			fileYaml: `---
+# predictable-yaml: ignore
 spec:
   template: {}`,
 		},
@@ -819,15 +863,18 @@ spec:
 		fN := &yaml.Node{}
 		err = yaml.Unmarshal([]byte(tc.fileYaml), fN)
 		if err != nil {
-			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling file test data!", tc.note)
+			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling file test data: %v", tc.note, err)
 			continue
 		}
 		fileNode := &Node{Node: fN}
 		WalkConvertYamlNodeToMainNode(fileNode)
-		ignoreRequireds := GetIgnoreRequireds(fileNode)
+		fileConfigs := GetFileConfigs(fileNode)
+		if fileConfigs.Ignore {
+			continue
+		}
 
 		// do it
-		gotErrs := WalkAndCompare(configNode, fileNode, ignoreRequireds, ValidationErrors{})
+		gotErrs := WalkAndCompare(configNode, fileNode, fileConfigs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {

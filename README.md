@@ -1,34 +1,41 @@
 # predictable-yaml
 
 ## Status
-This is an early work in progress, not ready for use yet.
+This is alpha, but ready for use.
 
 ## Usage
-* `go run main.go --help`
+* `go run main.go --help` OR
+* `go build main.go -o predictable-yaml`
+* `predictable-yaml --help` OR
+* `go install`
+* `predictable-yaml --help`
 
 Examples:
-* `find test-data -name '*\.yaml' | go run main.go --config-dir example-configs`
-* `find test-data -name '*\.valid.yaml' | go run main.go --config-dir example-configs --quiet`
+* `find test-data -name '*\.yaml' | predictable-yaml --config-dir example-configs`
+* `find test-data -name '*\.valid.yaml' | predictable-yaml --config-dir example-configs --quiet`
 * `find test-data -name '*.yaml' | docker run -i --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest --config-dir example-configs`
 
-## Algorithm
-* Indentation must match, between the config file and target files.
-* For each line in the config file, find any matching target file lines and validate, recursively.
-* Lines in the target file must be somewhere after the line number matched by the config's line number minus one's config, not nessarily immediately after.* (This ensures a consistent order while allowing comments and unaccounted for objects keys.)
-* Lines set to `first` in the config must be first in the target file's Map.
-* Lines set to `required` in the config must exist in the target file. This matches on the key's name and column number.
-* Lines set to `ditto` must pass the same validation as the configs under another key.
-* Lines set to `none` are cataloged as needed but have no other requirements. This is useful when a key is not required, but if it's included, certain sub-keys should be required.
+## Functionaltiy
+* Supports multiple config schema files.
+* Indentation does not have to match between the config file and target files. Use another linter for that.
+* Lines in the target file that exist in the config file must be in the same order as the config file, but there can be any amount of lines inbetween them.
 
 ## Config files
 * Supports multiple config schema files. Place them in the config directory.
-    * Config type can be configured with the comment `# predictable-yaml-kind: my-schema`.
-        * If this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value.
-    * Target file type will be determined in the same way.
-* Must not have comments other than the configuration ones specific to this program.
-* Set `first` to throw errors if a key is not first.
-* Set `required` to throw errors if a key is not found.
-* Set `ditto` to setup a key and sub-keys with the same configs as another key and sub-keys.
+    * Config type can be configured with the comment `# predictable-yaml: kind=my-schema`, but if this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value. If neither are found, an error will be thrown.
+    * Target file type will be determined in the same way, however if a matching config is not found, a warning will be output.
+* Config files must not have comments other than the configuration ones specific to this program.
+* Set `# first` to throw errors if a key is not first.
+* Set `# required` to throw errors if a key is not found.
+* Set `# ditto` to setup a key and sub-keys with the same configs as another key and sub-keys.
+* Set any combination of these like `# first, required, ditto`.
 
-## Test
+## Configuring per file overrides
+__Config comments in target files must be before, inline, or after the first line of yaml (not just at the top of the file.)__
+* File type can be configured or overridden with the comment `# predictable-yaml: kind=my-schema`.
+* A single file can be skipped with the comment `# predictable-yaml: ignore-file`.
+* A single file can be skipped with the comment `# predictable-yaml: ignore-requireds`.
+* These can combined: `# predictable-yaml: kind=my-schema, ignore-requireds`.
+
+## Tests
 * Run with `go test ./...`.
