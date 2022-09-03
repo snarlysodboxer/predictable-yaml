@@ -17,6 +17,7 @@ package compare
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -148,16 +149,16 @@ func WalkParseLoadConfigComments(node *Node) {
 }
 
 // WalkAndCompare walks the tree and does the validation
-func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs ValidationErrors) ValidationErrors {
+func WalkAndCompare(configNode, fileNode *Node, configMap ConfigMap, fileConfigs FileConfigs, errs ValidationErrors) ValidationErrors {
 	switch configNode.Kind {
 	case yaml.DocumentNode:
 		if fileNode.Kind != yaml.DocumentNode {
-			return append(errs, fmt.Errorf("program error: expected file node to be Document: %v", fileNode))
+			return append(errs, fmt.Errorf("program error: expected file node to be Document: %#v", fileNode))
 		}
-		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], fileConfigs, errs)
+		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], configMap, fileConfigs, errs)
 	case yaml.MappingNode:
 		if fileNode.Kind != yaml.MappingNode {
-			return append(errs, fmt.Errorf("program error: expected file node to be Map: %v", fileNode))
+			return append(errs, fmt.Errorf("program error: expected file node to be Map: %#v", fileNode))
 		}
 		for _, innerConfigNode := range configNode.NodeContent {
 			// only do scalar nodes because we'll walk to their FollowingContent nodes in scalar section
@@ -173,7 +174,7 @@ func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs Va
 			found := false
 			for _, innerFileNode := range fileNode.NodeContent {
 				if innerFileNode.Kind == yaml.ScalarNode && innerConfigNode.Value == innerFileNode.Value {
-					errs = WalkAndCompare(innerConfigNode, innerFileNode, fileConfigs, errs)
+					errs = WalkAndCompare(innerConfigNode, innerFileNode, configMap, fileConfigs, errs)
 					found = true
 					break
 				}
@@ -186,15 +187,15 @@ func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs Va
 		}
 	case yaml.SequenceNode:
 		if fileNode.Kind != yaml.SequenceNode {
-			return append(errs, fmt.Errorf("program error: expected file node to be Sequence: %v", fileNode))
+			return append(errs, fmt.Errorf("program error: expected file node to be Sequence: %#v", fileNode))
 		}
 		for _, fNode := range fileNode.NodeContent {
 			// use the same configNode for each entry in the sequence
-			errs = WalkAndCompare(configNode.NodeContent[0], fNode, fileConfigs, errs)
+			errs = WalkAndCompare(configNode.NodeContent[0], fNode, configMap, fileConfigs, errs)
 		}
 	case yaml.ScalarNode:
 		if fileNode.Kind != yaml.ScalarNode {
-			return append(errs, fmt.Errorf("program error: expected file node to be Scalar: %v", fileNode))
+			return append(errs, fmt.Errorf("program error: expected file node to be Scalar: %#v", fileNode))
 		}
 
 		// check 'first'
@@ -209,13 +210,7 @@ func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs Va
 
 		// check 'ditto'
 		if configNode.Ditto != "" {
-			rootNode := walkToRootNode(configNode)
-			cN, err := walkToNodeForPath(rootNode, configNode.Ditto, 0)
-			if err != nil {
-				errs = append(errs, err)
-			} else {
-				errs = append(errs, WalkAndCompare(cN, fileNode, fileConfigs, errs)...)
-			}
+			errs = append(errs, walkCheckDitto(configNode, fileNode, configMap, fileConfigs, errs)...)
 		}
 
 		// walk this scalar's following content node
@@ -231,7 +226,7 @@ func WalkAndCompare(configNode, fileNode *Node, fileConfigs FileConfigs, errs Va
 			return append(errs, fmt.Errorf("validation error: want '%s' to be a %s node, got '%s'", configPath, kindToString(configNode.FollowingContentNode.Kind), kindToString(fileNode.FollowingContentNode.Kind)))
 		}
 
-		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, fileConfigs, errs)
+		return WalkAndCompare(configNode.FollowingContentNode, fileNode.FollowingContentNode, configMap, fileConfigs, errs)
 	default:
 		return append(errs, fmt.Errorf("did not expect configNode.Kind of: %v", fileNode.Kind))
 	}
@@ -267,6 +262,37 @@ func walkCheckAfter(configNode, fileNode *Node) ValidationErrors {
 		// check older sister's older sister
 		return walkCheckAfter(configNode.PreviousLineNode, fileNode)
 	}
+
+	return errs
+}
+
+func walkCheckDitto(configNode, fileNode *Node, configMap ConfigMap, fileConfigs FileConfigs, errs ValidationErrors) ValidationErrors {
+	startDot := regexp.MustCompile(`^\.`)
+	if startDot.MatchString(configNode.Ditto) {
+		// is local path
+		rootNode := walkToRootNode(configNode)
+		cN, err := walkToNodeForPath(rootNode, configNode.Ditto, 0)
+		if err != nil {
+			return append(errs, err)
+		} else {
+			return append(errs, WalkAndCompare(cN, fileNode, configMap, fileConfigs, errs)...)
+		}
+	}
+
+	// is path in another config altogether
+	dittoKind := strings.Split(configNode.Ditto, `.`)[0]
+	dittoPath := fmt.Sprintf(".%s", strings.Join(strings.Split(configNode.Ditto, `.`)[1:], `.`))
+	cN, ok := configMap[dittoKind]
+	if !ok {
+		filePath := getReferencePath(configNode, 0, "")
+		err := fmt.Errorf("configuration error: no config found for schema '%s' specified at path: %s", dittoKind, filePath)
+		return append(errs, err)
+	}
+	n, err := walkToNodeForPath(cN, dittoPath, 0)
+	if err != nil {
+		return append(errs, err)
+	}
+	errs = append(errs, WalkAndCompare(n, fileNode, configMap, fileConfigs, errs)...)
 
 	return errs
 }

@@ -1,0 +1,28 @@
+---
+apiVersion: core/v1  # first, required
+kind: Pod  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: default
+  labels:  # required
+    app: example  # first, required
+  annotations:
+spec:
+  serviceAccountName: example  # first
+  securityContext:
+  initContainers:  # ditto=.spec.containers
+  containers:
+  - name: example  # first, required
+    image: snarlysodboxer/some-app:latest  # required
+    imagePullPolicy: IfNotPresent  # required
+    command:
+    args:
+    envFrom:
+    env:
+    - name: EXAMPLE_VAR  # first, required
+    ports:
+    - name: server  # first, required
+    volumeMounts:
+    - name: my-config  # first, required
+  volumes:
+  - name: my-config  # first, required

@@ -99,7 +99,7 @@ var rootCmd = &cobra.Command{
 			}
 
 			// do it
-			errs := compare.WalkAndCompare(configNode, fileNode, fileConfigs, compare.ValidationErrors{})
+			errs := compare.WalkAndCompare(configNode, fileNode, configMap, fileConfigs, compare.ValidationErrors{})
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))

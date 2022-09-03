@@ -19,22 +19,4 @@ spec:  # required
     metadata:  # required
       labels:  # required
         app: example  # first, required
-    spec:
-      serviceAccountName: example  # first
-      securityContext:
-      initContainers:  # ditto=.spec.template.spec.containers
-      containers:
-      - name: example  # first, required
-        image: snarlysodboxer/some-app:latest  # required
-        imagePullPolicy: IfNotPresent  # required
-        command:
-        args:
-        envFrom:
-        env:
-        - name: EXAMPLE_VAR  # first, required
-        ports:
-        - name: server  # first, required
-        volumeMounts:
-        - name: my-config  # first, required
-      volumes:
-      - name: my-config  # first, required
+    spec:  # ditto=Pod.spec
