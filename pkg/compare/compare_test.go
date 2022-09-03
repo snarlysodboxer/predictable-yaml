@@ -270,7 +270,7 @@ func TestWalkConvertYamlNodeToMainNode(t *testing.T) {
 
 }
 
-func TestGetSchemaType(t *testing.T) {
+func TestGetFileConfigs(t *testing.T) {
 	type testCase struct {
 		note     string
 		yaml     string
@@ -300,7 +300,6 @@ spec:
 			yaml: `---
 kind: Deployment
 # predictable-yaml: kind=generic
-
 spec:
   asdf`,
 			expected: "generic",
@@ -617,7 +616,7 @@ func TestWalkAndCompare(t *testing.T) {
 	type testCase struct {
 		note         string
 		expectedErrs ValidationErrors
-		configYaml   string
+		configYamls  []string
 		fileYaml     string
 	}
 
@@ -625,7 +624,8 @@ func TestWalkAndCompare(t *testing.T) {
 		{
 			note:         "all in order",
 			expectedErrs: ValidationErrors{},
-			configYaml: `---
+			configYamls: []string{
+				`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -636,7 +636,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -656,14 +656,14 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].name' to be first, got '.spec.template.spec.containers[0].command'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[1].name' to be first, got '.spec.template.spec.containers[1].command'"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
       initContainers:  # ditto=.spec.template.spec.containers
       containers:
-      - name: cool-app  # first, required`,
+      - name: cool-app  # first, required`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -682,7 +682,7 @@ spec:
 			expectedErrs: ValidationErrors{
 				fmt.Errorf("validation error: missing required key '.spec.template.spec'"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -693,7 +693,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -706,7 +706,7 @@ spec:
 			expectedErrs: ValidationErrors{
 				fmt.Errorf("validation error: missing required key '.spec.template.spec.containers[0].name'"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -717,7 +717,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -733,7 +733,7 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.containers' to be after '.spec.template.spec.initContainers', is before"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].args' to be after '.spec.template.spec.containers[0].command', is before"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -744,7 +744,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment
 # this is that
@@ -772,7 +772,7 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.initContainers[0].args' to be after '.spec.template.spec.initContainers[0].name', is before"),
 				fmt.Errorf("validation error: missing required key '.spec.template.spec.initContainers[1].name'"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -783,7 +783,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -810,7 +810,7 @@ spec:
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.path' to be after '.spec.template.spec.containers[0].readinessProbe.httpGet.port', is before"),
 			},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment # first
 spec:
   template:  # required
@@ -823,7 +823,54 @@ spec:
             port: http  # first, required
             path: /
             scheme: HTTP
-        readinessProbe:  # ditto=.spec.template.spec.containers[0].livenessProbe`,
+        readinessProbe:  # ditto=.spec.template.spec.containers[0].livenessProbe`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: uncool-app
+        livenessProbe:
+          periodSeconds: 10
+          httpGet:
+            port: http
+            path: /
+            scheme: HTTP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTP
+          periodSeconds: 10`,
+		},
+		{
+			note: "ditto 3, different config schema",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet' to be after '.spec.template.spec.containers[0].readinessProbe.periodSeconds', is before"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.path' to be after '.spec.template.spec.containers[0].readinessProbe.httpGet.port', is before"),
+			},
+			configYamls: []string{
+				`---
+kind: Pod  # first
+spec:
+  containers:
+  - name: cool-app  # first, required
+    livenessProbe:
+      periodSeconds: 10  # first, required
+      httpGet:
+        port: http  # first, required
+        path: /
+        scheme: HTTP
+    readinessProbe:  # ditto=.spec.containers[0].livenessProbe`,
+				`---
+kind: Deployment  # first
+spec:
+  template:  # required
+    spec:  # ditto=Pod.spec`,
+			},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -847,7 +894,7 @@ spec:
 		{
 			note:         "overrides 1",
 			expectedErrs: ValidationErrors{},
-			configYaml: `---
+			configYamls: []string{`---
 # predictable-yaml: kind=Deployment
 spec: # first
   template:  # required
@@ -858,7 +905,7 @@ spec: # first
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 # predictable-yaml: ignore-requireds, kind=Deployment
 spec:
@@ -867,7 +914,7 @@ spec:
 		{
 			note:         "overrides ignore",
 			expectedErrs: ValidationErrors{},
-			configYaml: `---
+			configYamls: []string{`---
 # predictable-yaml: kind=Deployment
 spec: # first
   template:  # required
@@ -878,7 +925,7 @@ spec: # first
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 # predictable-yaml: ignore
 spec:
@@ -887,7 +934,7 @@ spec:
 		{
 			note:         "first doesn't count if not required and non existent",
 			expectedErrs: ValidationErrors{},
-			configYaml: `---
+			configYamls: []string{`---
 kind: Deployment  # first
 spec:
   template:  # required
@@ -898,7 +945,7 @@ spec:
         command:
         - asdf
         args:
-        - asdf`,
+        - asdf`},
 			fileYaml: `---
 kind: Deployment  # first
 spec:
@@ -909,18 +956,26 @@ spec:
 
 	for _, tc := range testCases {
 		// convert yaml
-		cN := &yaml.Node{}
-		err := yaml.Unmarshal([]byte(tc.configYaml), cN)
-		if err != nil {
-			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling config test data!", tc.note)
-			continue
+		configMap := ConfigMap{}
+		for _, cYaml := range tc.configYamls {
+			cN := &yaml.Node{}
+			err := yaml.Unmarshal([]byte(cYaml), cN)
+			if err != nil {
+				t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling config test data!", tc.note)
+				continue
+			}
+			configNode := &Node{Node: cN}
+			WalkConvertYamlNodeToMainNode(configNode)
+			WalkParseLoadConfigComments(configNode)
+			fileConfigs := GetFileConfigs(configNode)
+			if fileConfigs.Kind == "" {
+				t.Errorf("Description: %s: main.WalkAndCompare(...): failed getting kind for config test data!", tc.note)
+			}
+			configMap[fileConfigs.Kind] = configNode
 		}
-		configNode := &Node{Node: cN}
-		WalkConvertYamlNodeToMainNode(configNode)
-		WalkParseLoadConfigComments(configNode)
 
 		fN := &yaml.Node{}
-		err = yaml.Unmarshal([]byte(tc.fileYaml), fN)
+		err := yaml.Unmarshal([]byte(tc.fileYaml), fN)
 		if err != nil {
 			t.Errorf("Description: %s: main.WalkAndCompare(...): failed unmarshaling file test data: %v", tc.note, err)
 			continue
@@ -933,7 +988,7 @@ spec:
 		}
 
 		// do it
-		gotErrs := WalkAndCompare(configNode, fileNode, fileConfigs, ValidationErrors{})
+		gotErrs := WalkAndCompare(configMap[fileConfigs.Kind], fileNode, configMap, fileConfigs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {

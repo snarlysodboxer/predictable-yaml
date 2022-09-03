@@ -27,15 +27,18 @@ Examples:
 * Config files must not have comments other than the configuration ones specific to this program.
 * Set `# first` to throw errors if a key is not first.
 * Set `# required` to throw errors if a key is not found.
-* Set `# ditto` to setup a key and sub-keys with the same configs as another key and sub-keys.
-* Set any combination of these like `# first, required, ditto=.spec.template.spec.containers[0].livenessProbe`.
+* Set `# ditto=[kind].<path>` to setup a key and sub-keys with the same configs as another key and sub-keys.
+    * Point to a key in the same config file by starting with a `.`, like: `ditto=.spec.template.spec.containers`.
+    * Point to a key in a different config file by starting with a schema type, then the path to the node, like: `ditto=Pod.spec`.
+* Set any combination of these like: `# first, required, ditto=Pod.spec`.
+* See [example-configs](./example-configs) for examples.
 
 ## Configuring per file overrides
 __Config comments in target files must be before, inline, or after the first line of yaml (not just at the top of the file.)__
 * File type can be configured or overridden with the comment `# predictable-yaml: kind=my-schema`.
 * A single file can be skipped with the comment `# predictable-yaml: ignore-file`.
 * A single file can be skipped with the comment `# predictable-yaml: ignore-requireds`.
-* These can combined: `# predictable-yaml: kind=my-schema, ignore-requireds`.
+* These can be combined: `# predictable-yaml: kind=my-schema, ignore-requireds`.
 
 ## Tests
 * Run with `go test ./...`.
