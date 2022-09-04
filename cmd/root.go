@@ -16,8 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -35,89 +33,9 @@ var cfgDir string
 var quiet bool
 
 var rootCmd = &cobra.Command{
-	Use:   "predictable-yaml",
-	Short: "Lint YAML key order",
-	Long: `Compare YAML files to config files, checking for matching
-    key order, missing required keys, and first key in sequence or map.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// read files in configDir, populate configMap
-		configMap := compare.ConfigMap{}
-		configFiles, err := ioutil.ReadDir(cfgDir)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, file := range configFiles {
-			if file.IsDir() {
-				continue
-			}
-			re := regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
-			if !re.MatchString(file.Name()) {
-				continue
-			}
-			cNode := &yaml.Node{}
-			path := fmt.Sprintf("%s/%s", cfgDir, file.Name())
-			err := getYAML(cNode, path)
-			if err != nil {
-				log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
-			}
-			configNode := &compare.Node{Node: cNode}
-			compare.WalkConvertYamlNodeToMainNode(configNode)
-			compare.WalkParseLoadConfigComments(configNode)
-			fileConfigs := compare.GetFileConfigs(configNode)
-			if fileConfigs.Kind == "" {
-				log.Fatalf("error determining schema for config file: %s: %v", path, err)
-			}
-			configMap[fileConfigs.Kind] = configNode
-		}
-
-		// read files to check; loop and check
-		filePaths, err := getFilePathsFromStdin()
-		if err != nil {
-			log.Fatal(err)
-		}
-		success := true
-		for _, filePath := range filePaths {
-			// setup
-			fNode := &yaml.Node{}
-			err := getYAML(fNode, filePath)
-			if err != nil {
-				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
-			}
-			fileNode := &compare.Node{Node: fNode}
-			compare.WalkConvertYamlNodeToMainNode(fileNode)
-			fileConfigs := compare.GetFileConfigs(fileNode)
-			if fileConfigs.Ignore {
-				continue
-			}
-			if fileConfigs.Kind == "" {
-				log.Fatalf("error: unable to determine a schema for target file: %s", filePath)
-			}
-			configNode, ok := configMap[fileConfigs.Kind]
-			if !ok {
-				log.Printf("WARNING: no config found for schema '%s' in file: %s", fileConfigs.Kind, filePath)
-				continue
-			}
-
-			// do it
-			errs := compare.WalkAndCompare(configNode, fileNode, configMap, fileConfigs, compare.ValidationErrors{})
-			if len(errs) != 0 {
-				success = false
-				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
-			} else {
-				if !quiet {
-					log.Printf("File '%s' is valid!", filePath)
-				}
-			}
-		}
-
-		if !success {
-			log.Fatal("FAIL")
-		}
-
-		if !quiet {
-			log.Println("SUCCESS")
-		}
-	},
+	Use:   "predictable-yaml <command>",
+	Short: "Lint or fix YAML key order",
+	Long:  `Compare YAML files to config files.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -130,44 +48,55 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgDir, "config-dir", "~/.predictable-yaml", "directory containing config file(s), (default is $HOME/.predictable-yaml)")
-	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "output nothing, unless there are failures")
 	if strings.HasPrefix(cfgDir, "~/") {
 		dirname, _ := os.UserHomeDir()
 		cfgDir = filepath.Join(dirname, cfgDir[2:])
 	}
 }
 
-func getFilePathsFromStdin() ([]string, error) {
-	filePaths := make([]string, 0)
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		text := scanner.Text()
-		if len(text) != 0 {
-			filePaths = append(filePaths, text)
-		} else {
+func getConfigMap() compare.ConfigMap {
+	configMap := compare.ConfigMap{}
+	configFiles, err := ioutil.ReadDir(cfgDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range configFiles {
+		if file.IsDir() {
 			continue
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return filePaths, err
-	}
-	if len(filePaths) < 1 {
-		return filePaths, errors.New("error: no file paths passed to stdin")
+		re := regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
+		if !re.MatchString(file.Name()) {
+			continue
+		}
+		cNode := &yaml.Node{}
+		path := fmt.Sprintf("%s/%s", cfgDir, file.Name())
+		_, err := getYAML(cNode, path)
+		if err != nil {
+			log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
+		}
+		configNode := &compare.Node{Node: cNode}
+		compare.WalkConvertYamlNodeToMainNode(configNode)
+		compare.WalkParseLoadConfigComments(configNode)
+		fileConfigs := compare.GetFileConfigs(configNode)
+		if fileConfigs.Kind == "" {
+			log.Fatalf("error determining schema for config file: %s: %v", path, err)
+		}
+		configMap[fileConfigs.Kind] = configNode
 	}
 
-	return filePaths, nil
+	return configMap
 }
 
-func getYAML(node *yaml.Node, file string) error {
+func getYAML(node *yaml.Node, file string) ([]byte, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return err
+		return data, err
 	}
 
 	err = yaml.Unmarshal(data, node)
 	if err != nil {
-		return err
+		return data, err
 	}
 
-	return nil
+	return data, nil
 }

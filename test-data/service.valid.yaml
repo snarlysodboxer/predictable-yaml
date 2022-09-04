@@ -12,6 +12,6 @@ spec:
     app: example
   ports:
   - name: example
-    protocol: TCP
     port: 8080
     targetPort: example
+    protocol: TCP

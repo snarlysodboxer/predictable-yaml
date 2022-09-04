@@ -43,14 +43,14 @@ spec:
         env:
         - name: MY_CONFIG_FILE
           value: config.yaml
-        securityContext:
-          allowPrivilegeEscalation: false
-          procMount: Default
         ports:
         - name: server
           containerPort: 8080
         - name: metrics
           containerPort: 9000
+        securityContext:
+          allowPrivilegeEscalation: false
+          procMount: Default
       - name: coolness-app
         image: cool-org/coolness-app:v0.0.0
         imagePullPolicy: IfNotPresent
