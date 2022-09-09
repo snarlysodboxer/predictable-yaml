@@ -16,8 +16,11 @@ limitations under the License.
 package compare
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
+
+	// "github.com/kylelemons/godebug/diff"
 
 	"gopkg.in/yaml.v3"
 )
@@ -272,9 +275,11 @@ func TestWalkConvertYamlNodeToMainNode(t *testing.T) {
 
 func TestGetFileConfigs(t *testing.T) {
 	type testCase struct {
-		note     string
-		yaml     string
-		expected string
+		note                   string
+		yaml                   string
+		expectedKind           string
+		expectedIgnore         bool
+		expectedIgnoreRequired bool
 	}
 
 	testCases := []testCase{
@@ -284,16 +289,20 @@ func TestGetFileConfigs(t *testing.T) {
 # predictable-yaml: kind=generic,ignore-requireds
 kind: Deployment
 spec:
-  asdf`,
-			expected: "generic",
+  asdf: fdsa`,
+			expectedKind:           "generic",
+			expectedIgnoreRequired: true,
+			expectedIgnore:         false,
 		},
 		{
 			note: "line comment kind generic",
 			yaml: `---
-kind: Deployment  # predictable-yaml: kind=generic
+kind: Deployment  # predictable-yaml: kind=generic, ignore
 spec:
-  asdf`,
-			expected: "generic",
+  asdf: fdsa`,
+			expectedKind:           "generic",
+			expectedIgnoreRequired: false,
+			expectedIgnore:         true,
 		},
 		{
 			note: "footer comment kind generic",
@@ -301,16 +310,20 @@ spec:
 kind: Deployment
 # predictable-yaml: kind=generic
 spec:
-  asdf`,
-			expected: "generic",
+  asdf: fdsa`,
+			expectedKind:           "generic",
+			expectedIgnoreRequired: false,
+			expectedIgnore:         false,
 		},
 		{
 			note: "regular kind deployment",
 			yaml: `---
 kind: Deployment
 spec:
-  asdf`,
-			expected: "Deployment",
+  asdf: fdsa`,
+			expectedKind:           "Deployment",
+			expectedIgnoreRequired: false,
+			expectedIgnore:         false,
 		},
 	}
 
@@ -326,8 +339,14 @@ spec:
 
 		// do it
 		got := GetFileConfigs(node)
-		if got.Kind != tc.expected {
-			t.Errorf("Description: %s: main.GetFileConfigs(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expected, got)
+		if got.Kind != tc.expectedKind {
+			t.Errorf("Description: %s: main.GetFileConfigs(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expectedKind, got)
+		}
+		if got.Ignore != tc.expectedIgnore {
+			t.Errorf("Description: %s: main.GetFileConfigs(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expectedIgnoreRequired, got.Ignore)
+		}
+		if got.IgnoreRequireds != tc.expectedIgnoreRequired {
+			t.Errorf("Description: %s: main.GetFileConfigs(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, tc.expectedIgnoreRequired, got.IgnoreRequireds)
 		}
 	}
 }
@@ -406,12 +425,13 @@ spec:
 
 func TestWalkParseLoadConfigComments(t *testing.T) {
 	type testCase struct {
-		note     string
-		yaml     string
-		path     string
-		first    bool
-		required bool
-		ditto    string
+		note      string
+		yaml      string
+		path      string
+		first     bool
+		required  bool
+		preferred bool
+		ditto     string
 	}
 
 	// note: some of these comments might not make sense for a Kubernetes
@@ -420,10 +440,10 @@ func TestWalkParseLoadConfigComments(t *testing.T) {
 spec:  # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
-      containers:
+      initContainers: []  # preferred, ditto=.spec.template.spec.containers
+      containers:  # required
       - name: cool-app  # first, required
-        command:
+        command:  # preferred
         - asdf
         args:
         - asdf
@@ -431,44 +451,58 @@ spec:  # first
 
 	testCases := []testCase{
 		{
-			note:     ".spec: first",
-			yaml:     testYamlContainers,
-			path:     ".spec",
-			first:    true,
-			required: false,
-			ditto:    "",
+			note:      ".spec: first",
+			yaml:      testYamlContainers,
+			path:      ".spec",
+			first:     true,
+			required:  false,
+			preferred: false,
+			ditto:     "",
 		},
 		{
-			note:     ".spec.template: required",
-			yaml:     testYamlContainers,
-			path:     ".spec.template",
-			first:    false,
-			required: true,
-			ditto:    "",
+			note:      ".spec.template: required",
+			yaml:      testYamlContainers,
+			path:      ".spec.template",
+			first:     false,
+			required:  true,
+			preferred: false,
+			ditto:     "",
 		},
 		{
-			note:     ".spec.template.spec: first, required",
-			yaml:     testYamlContainers,
-			path:     ".spec.template.spec",
-			first:    true,
-			required: true,
-			ditto:    "",
+			note:      ".spec.template.spec: first, required",
+			yaml:      testYamlContainers,
+			path:      ".spec.template.spec",
+			first:     true,
+			required:  true,
+			preferred: false,
+			ditto:     "",
 		},
 		{
-			note:     ".spec.template.spec.initContainers: ditto=.spec.template.spec.containers",
-			yaml:     testYamlContainers,
-			path:     ".spec.template.spec.initContainers",
-			first:    false,
-			required: false,
-			ditto:    ".spec.template.spec.containers",
+			note:      ".spec.template.spec.initContainers: ditto=.spec.template.spec.containers",
+			yaml:      testYamlContainers,
+			path:      ".spec.template.spec.initContainers",
+			first:     false,
+			required:  false,
+			preferred: true,
+			ditto:     ".spec.template.spec.containers",
 		},
 		{
-			note:     ".spec.template.spec.containers: (defaults)",
-			yaml:     testYamlContainers,
-			path:     ".spec.template.spec.containers",
-			first:    false,
-			required: false,
-			ditto:    "",
+			note:      ".spec.template.spec.containers: (defaults)",
+			yaml:      testYamlContainers,
+			path:      ".spec.template.spec.containers",
+			first:     false,
+			required:  true,
+			preferred: false,
+			ditto:     "",
+		},
+		{
+			note:      ".spec.template.spec.containers[0].command: preferred",
+			yaml:      testYamlContainers,
+			path:      ".spec.template.spec.containers[0].command",
+			first:     false,
+			required:  false,
+			preferred: true,
+			ditto:     "",
 		},
 	}
 
@@ -477,7 +511,8 @@ spec:  # first
 		n := &yaml.Node{}
 		err := yaml.Unmarshal([]byte(tc.yaml), n)
 		if err != nil {
-			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): failed unmarshaling test data!\n\t%v", tc.note, err)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): failed unmarshaling test data!\n\t%v", tc.note, err)
+			continue
 		}
 
 		node := &Node{Node: n}
@@ -487,10 +522,12 @@ spec:  # first
 		// find node to test via path
 		childNode, err := walkToNodeForPath(node, tc.path, 0)
 		if err != nil {
-			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): expected: no error, got: %#v", tc.note, err)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): expected: no error, got: %#v", tc.note, err)
+			continue
 		}
 		if childNode == nil {
-			t.Fatalf("Description: %s: main.WalkParseLoadConfigComments(...): failed finding test data node path!", tc.note)
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): failed finding test data node path!", tc.note)
+			continue
 		}
 
 		// do it
@@ -499,6 +536,9 @@ spec:  # first
 		}
 		if childNode.Required != tc.required {
 			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.required, childNode.Required)
+		}
+		if childNode.Preferred != tc.preferred {
+			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.preferred, childNode.Preferred)
 		}
 		if childNode.Ditto != tc.ditto {
 			t.Errorf("Description: %s: main.WalkParseLoadConfigComments(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.ditto, childNode.Ditto)
@@ -630,7 +670,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -661,7 +701,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required`},
 			fileYaml: `---
@@ -687,7 +727,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -711,7 +751,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -738,7 +778,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -777,7 +817,7 @@ kind: Deployment # first
 spec:
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -823,7 +863,7 @@ spec:
             port: http  # first, required
             path: /
             scheme: HTTP
-        readinessProbe:  # ditto=.spec.template.spec.containers[0].livenessProbe`},
+        readinessProbe: {}  # ditto=.spec.template.spec.containers[0].livenessProbe`},
 			fileYaml: `---
 kind: Deployment
 spec:
@@ -864,12 +904,12 @@ spec:
         port: http  # first, required
         path: /
         scheme: HTTP
-    readinessProbe:  # ditto=.spec.containers[0].livenessProbe`,
+    readinessProbe: {}  # ditto=.spec.containers[0].livenessProbe`,
 				`---
 kind: Deployment  # first
 spec:
   template:  # required
-    spec:  # ditto=Pod.spec`,
+    spec: {}  # ditto=Pod.spec`,
 			},
 			fileYaml: `---
 kind: Deployment
@@ -899,7 +939,7 @@ spec:
 spec: # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -919,7 +959,7 @@ spec:
 spec: # first
   template:  # required
     spec:  # first, required
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -939,7 +979,7 @@ kind: Deployment  # first
 spec:
   template:  # required
     spec:  # first
-      initContainers:  # ditto=.spec.template.spec.containers
+      initContainers: []  # ditto=.spec.template.spec.containers
       containers:
       - name: cool-app  # first, required
         command:
@@ -988,12 +1028,513 @@ spec:
 		}
 
 		// do it
-		gotErrs := WalkAndCompare(configMap[fileConfigs.Kind], fileNode, configMap, fileConfigs, ValidationErrors{})
+		sortConfigs := SortConfigs{
+			ConfigMap:   configMap,
+			FileConfigs: fileConfigs,
+		}
+		gotErrs := WalkAndCompare(configMap[fileConfigs.Kind], fileNode, sortConfigs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {
 			t.Errorf("Description: %s: main.WalkAndCompare(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
 			continue
 		}
+	}
+}
+
+func TestWalkAndSort(t *testing.T) {
+	type testCase struct {
+		note             string
+		toBeginning      bool
+		ignorePreferreds bool
+		expectedErrs     ValidationErrors
+		configYamls      []string
+		fileYaml         string
+		expectedYaml     string
+	}
+
+	testCases := []testCase{
+		{
+			note:         "all in order",
+			toBeginning:  false,
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: example
+  labels:  # required
+    app: example  # first, required
+spec:  # required
+  template:  # required
+    metadata:
+      labels: {}  # ditto=.metadata.labels
+    spec:  # first, required
+      initContainers: []  # ditto=.spec.template.spec.containers
+      containers:
+      - name: cool-app  # first, required
+        image: example
+        command:
+        - asdf
+        args:
+        - asdf
+        livenessProbe:
+          periodSeconds: 10  # first, required
+          httpGet:
+            port: http  # first, required
+            path: /
+            scheme: HTTP
+        readinessProbe: {}  # ditto=.spec.template.spec.containers[0].livenessProbe`},
+			fileYaml: `---
+# predictable-yaml: ignore-requireds
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: example
+  # comment about name
+  name: example
+  labels:
+    asdf: fdsa
+    # comment about asdf
+
+    app: example
+spec:
+  template:
+    someOtherThing:
+      asdf: fdsa
+    spec:
+      containers:
+      - command: # comment about command
+        - asdf
+        image: example
+        name: cool-app
+      - name: uncool-app
+        command:
+        - asdf
+      initContainers:
+      - command:
+        - asdf
+        image: example
+        name: cool-app
+        livenessProbe:
+          periodSeconds: 10
+          httpGet:
+            port: http
+            scheme: HTTP
+            path: /
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /
+            port: http
+          periodSeconds: 10
+    metadata:
+      labels:
+        asdf: example
+        app: example`,
+			expectedYaml: `# predictable-yaml: ignore-requireds
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # comment about name
+  name: example
+  namespace: example
+  labels:
+    app: example
+    asdf: fdsa
+    # comment about asdf
+spec:
+  template:
+    metadata:
+      labels:
+        app: example
+        asdf: example
+    spec:
+      initContainers:
+        - name: cool-app
+          image: example
+          command:
+            - asdf
+          livenessProbe:
+            periodSeconds: 10
+            httpGet:
+              port: http
+              path: /
+              scheme: HTTP
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              port: http
+              path: /
+              scheme: HTTP
+      containers:
+        - name: cool-app
+          image: example
+          command: # comment about command
+            - asdf
+        - name: uncool-app
+          command:
+            - asdf
+    someOtherThing:
+      asdf: fdsa
+`,
+		},
+		{
+			note:         "ditto from another kind",
+			toBeginning:  false,
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+kind: Pod  # first
+spec:
+  initContainers: []  # ditto=.spec.containers
+  containers:
+  - name: cool-app  # first, required
+    image: example
+    command:
+    - asdf
+    args:
+    - asdf
+    livenessProbe:
+      periodSeconds: 10  # first, required
+      httpGet:
+        port: http  # first, required
+        path: /
+        scheme: HTTP
+    readinessProbe: {}  # ditto=.spec.containers[0].livenessProbe`,
+				`---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: example
+  labels:  # required
+    app: example  # first, required
+spec:  # required
+  template:  # required
+    metadata:
+      labels: {}  # ditto=.metadata.labels
+    spec: {}  # ditto=Pod.spec`},
+			fileYaml: `---
+# predictable-yaml: ignore-requireds
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: example
+  # comment about name
+  name: example
+  labels:
+    asdf: fdsa
+    # comment about asdf
+
+    app: example
+spec:
+  template:
+    someOtherThing:
+      asdf: fdsa
+    spec:
+      containers:
+      - command: # comment about command
+        - asdf
+        image: example
+        name: cool-app
+      - name: uncool-app
+        command:
+        - asdf
+      initContainers:
+      - command:
+        - asdf
+        image: example
+        name: cool-app
+        livenessProbe:
+          periodSeconds: 10
+          httpGet:
+            port: http
+            scheme: HTTP
+            path: /
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /
+            port: http
+          periodSeconds: 10
+    metadata:
+      labels:
+        asdf: example
+        app: example`,
+			expectedYaml: `# predictable-yaml: ignore-requireds
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # comment about name
+  name: example
+  namespace: example
+  labels:
+    app: example
+    asdf: fdsa
+    # comment about asdf
+spec:
+  template:
+    metadata:
+      labels:
+        app: example
+        asdf: example
+    spec:
+      initContainers:
+        - name: cool-app
+          image: example
+          command:
+            - asdf
+          livenessProbe:
+            periodSeconds: 10
+            httpGet:
+              port: http
+              path: /
+              scheme: HTTP
+          readinessProbe:
+            periodSeconds: 10
+            httpGet:
+              port: http
+              path: /
+              scheme: HTTP
+      containers:
+        - name: cool-app
+          image: example
+          command: # comment about command
+            - asdf
+        - name: uncool-app
+          command:
+            - asdf
+    someOtherThing:
+      asdf: fdsa
+`,
+		},
+		{
+			note:         "missing required 1",
+			toBeginning:  false,
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: example
+  labels:  # required
+    app: example  # first, required
+spec:  # required
+  template: {}  # required`},
+			fileYaml: `---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  namespace: example
+  name: example
+  labels:
+    app: example
+spec: {}`,
+			expectedYaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example
+  namespace: example
+  labels:
+    app: example
+spec:
+  template: {}
+`,
+		},
+		{
+			note:         "missing required 2: include preferreds",
+			toBeginning:  true,
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+kind: Pod  # first
+spec:  # required
+  initContainers: []  # required, ditto=.spec.containers
+  containers:  # required
+  - name: TODO  # first, required
+    image: TODO  # required
+    command:  # preferred
+    - TODO
+    args: []  # preferred
+    livenessProbe:
+      periodSeconds: 10  # first, required
+      httpGet:
+        port: http  # first, required
+        path: /
+        scheme: HTTP
+    readinessProbe: {}  # ditto=.spec.containers[0].livenessProbe`,
+				`---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: TODO  # first, required
+  namespace: TODO  # preferred
+  labels:  # required
+    app: TODO  # first, required
+spec:  # required
+  template:  # required
+    metadata:
+      labels: {}  # ditto=.metadata.labels
+    spec: {}  # required, ditto=Pod.spec`},
+			fileYaml: `---
+kind: Deployment
+spec: {}`,
+			expectedYaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: TODO
+  namespace: TODO
+  labels:
+    app: TODO
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: TODO
+          image: TODO
+          command:
+            - TODO
+          args: []
+      containers:
+        - name: TODO
+          image: TODO
+          command:
+            - TODO
+          args: []
+`,
+		},
+		{
+			note:             "missing required 3: ignorePreferreds",
+			toBeginning:      true,
+			ignorePreferreds: true,
+			expectedErrs:     ValidationErrors{},
+			configYamls: []string{
+				`---
+kind: Pod  # first
+spec:  # required
+  initContainers: []  # ditto=.spec.containers
+  containers:  # required
+  - name: TODO  # first, required
+    image: TODO  # required
+    command: []  # preferred
+    args: []  # preferred
+    livenessProbe:
+      periodSeconds: 10  # first, required
+      httpGet:
+        port: http  # first, required
+        path: /
+        scheme: HTTP
+    readinessProbe: {}  # ditto=.spec.containers[0].livenessProbe`,
+				`---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: example  # first, required
+  namespace: example
+  labels:  # required
+    app: example  # first, required
+spec:  # required
+  template:  # required
+    metadata:
+      labels: {}  # ditto=.metadata.labels
+    spec: {}  # required, ditto=Pod.spec`},
+			fileYaml: `---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: example
+  labels:
+    app: example
+spec: {}`,
+			expectedYaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example
+  labels:
+    app: example
+spec:
+  template:
+    spec:
+      containers:
+        - name: TODO
+          image: TODO
+          command: []
+          args: []
+`,
+		},
+	}
+
+	for _, tc := range testCases {
+		// convert yaml
+		configMap := ConfigMap{}
+		for _, cYaml := range tc.configYamls {
+			cN := &yaml.Node{}
+			err := yaml.Unmarshal([]byte(cYaml), cN)
+			if err != nil {
+				t.Errorf("Description: %s: main.WalkAndSort(...): failed unmarshaling config test data!", tc.note)
+				continue
+			}
+			configNode := &Node{Node: cN}
+			WalkConvertYamlNodeToMainNode(configNode)
+			WalkParseLoadConfigComments(configNode)
+			fileConfigs := GetFileConfigs(configNode)
+			if fileConfigs.Kind == "" {
+				t.Fatalf("Description: %s: main.WalkAndSort(...): failed getting kind for config test data!", tc.note)
+				continue
+			}
+			configMap[fileConfigs.Kind] = configNode
+		}
+
+		fN := &yaml.Node{}
+		err := yaml.Unmarshal([]byte(tc.fileYaml), fN)
+		if err != nil {
+			t.Errorf("Description: %s: main.WalkAndSort(...): failed unmarshaling file test data: %v", tc.note, err)
+			continue
+		}
+		fileNode := &Node{Node: fN}
+		WalkConvertYamlNodeToMainNode(fileNode)
+		fileConfigs := GetFileConfigs(fileNode)
+		if fileConfigs.Ignore {
+			continue
+		}
+
+		// do it
+		sortConfs := SortConfigs{configMap, fileConfigs, tc.toBeginning, false}
+		gotErrs := WalkAndSort(configMap[fileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
+		expected := GetValidationErrorStrings(tc.expectedErrs)
+		got := GetValidationErrorStrings(gotErrs)
+		switch {
+		case len(gotErrs) != 0 && len(tc.expectedErrs) == 0:
+			t.Errorf("Description: %s: main.WalkAndSort(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
+			continue
+		case len(gotErrs) != 0 && len(tc.expectedErrs) != 0:
+			t.Errorf("Description: %s: main.WalkAndSort(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
+			continue
+		case len(gotErrs) == 0 && len(tc.expectedErrs) != 0:
+			t.Errorf("Description: %s: main.WalkAndSort(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
+			continue
+		}
+		var buf bytes.Buffer
+		encoder := yaml.NewEncoder(&buf)
+		encoder.SetIndent(2)
+		err = encoder.Encode(fileNode.Node)
+		if err != nil {
+			t.Errorf("Description: %s: main.WalkAndSort(...): \n-expected:\nno error\n+got:\n%v\n", tc.note, err)
+			continue
+		}
+		if buf.String() != tc.expectedYaml {
+			t.Errorf("Description: %s: main.WalkAndSort(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, tc.expectedYaml, buf.String())
+			continue
+		}
+		// if buf.String() != tc.expectedYaml {
+		//     dif := diff.Diff(tc.expectedYaml, buf.String())
+		//     t.Errorf("Description: %s: main.WalkAndSort(...): got diff:\n%s\n", tc.note, dif)
+		//     continue
+		// }
 	}
 }

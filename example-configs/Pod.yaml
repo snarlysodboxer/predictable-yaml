@@ -2,27 +2,29 @@
 apiVersion: core/v1  # first, required
 kind: Pod  # required
 metadata:  # required
-  name: example  # first, required
-  namespace: default
+  name: TODO  # first, required
+  namespace: TODO  # preferred
   labels:  # required
-    app: example  # first, required
-  annotations:
-spec:
+    app: TODO  # first, required
+  annotations: {}
+spec:  # required
   serviceAccountName: example  # first
-  securityContext:
-  initContainers:  # ditto=.spec.containers
-  containers:
-  - name: example  # first, required
-    image: snarlysodboxer/some-app:latest  # required
+  securityContext: {}
+  initContainers: []  # ditto=.spec.containers
+  containers:  # required
+  - name: TODO  # first, required
+    image: TODO  # required
     imagePullPolicy: IfNotPresent  # required
-    command:
-    args:
-    envFrom:
+    command:  # preferred
+    - TODO
+    args:  # preferred
+    - TODO
+    envFrom: []
     env:
-    - name: EXAMPLE_VAR  # first, required
+    - name: TODO  # first, required
     ports:
-    - name: server  # first, required
+    - name: TODO  # first, required
     volumeMounts:
-    - name: my-config  # first, required
+    - name: TODO  # first, required
   volumes:
-  - name: my-config  # first, required
+  - name: TODO  # first, required
