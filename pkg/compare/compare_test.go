@@ -116,158 +116,107 @@ func TestWalkConvertYamlNodeToMainNode(t *testing.T) {
 	WalkConvertYamlNodeToMainNode(node)
 
 	type testCase struct {
-		note                         string
-		expectedNode                 *yaml.Node
-		gotNode                      *yaml.Node
-		confirmConfigNode            *yaml.Node
-		expectedPreviousLineNode     *yaml.Node
-		gotPreviousLineNode          *Node
-		expectedFollowingContentNode *yaml.Node
-		gotFollowingContentNode      *Node
+		note              string
+		expectedNode      *yaml.Node
+		gotNode           *yaml.Node
+		confirmConfigNode *yaml.Node
 	}
 	testCases := []testCase{
 		{
-			note:                         "expected root map",
-			expectedNode:                 yRootMap,
-			gotNode:                      node.NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected root map",
+			expectedNode:      yRootMap,
+			gotNode:           node.NodeContent[0].Node,
+			confirmConfigNode: node.Content[0],
 		},
 		{
-			note:                         "expected .spec scalar",
-			expectedNode:                 ySpecScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[0],
-			expectedFollowingContentNode: ySpecMap,
-			gotFollowingContentNode:      node.NodeContent[0].NodeContent[0].FollowingContentNode,
+			note:              "expected .spec scalar",
+			expectedNode:      ySpecScalar,
+			gotNode:           node.NodeContent[0].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[0],
 		},
 		{
-			note:                         "expected .spec map",
-			expectedNode:                 ySpecMap,
-			gotNode:                      node.NodeContent[0].NodeContent[1].Node,
-			confirmConfigNode:            node.Content[0].Content[1],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec map",
+			expectedNode:      ySpecMap,
+			gotNode:           node.NodeContent[0].NodeContent[1].Node,
+			confirmConfigNode: node.Content[0].Content[1],
 		},
 		{
-			note:                         "expected .spec.template scalar",
-			expectedNode:                 ySpecTemplateScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[0],
-			expectedFollowingContentNode: ySpecTemplateMap,
-			gotFollowingContentNode:      node.NodeContent[0].NodeContent[1].NodeContent[0].FollowingContentNode,
+			note:              "expected .spec.template scalar",
+			expectedNode:      ySpecTemplateScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[0],
 		},
 		{
-			note:                         "expected .spec.template map",
-			expectedNode:                 ySpecTemplateMap,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template map",
+			expectedNode:      ySpecTemplateMap,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1],
 		},
 		{
-			note:                         "expected .spec.template.spec scalar",
-			expectedNode:                 ySpecTemplateSpecScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[0],
-			expectedFollowingContentNode: ySpecTemplateSpecMap,
-			gotFollowingContentNode:      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[0].FollowingContentNode,
+			note:              "expected .spec.template.spec scalar",
+			expectedNode:      ySpecTemplateSpecScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[0],
 		},
 		{
-			note:                         "expected .spec.template.spec map",
-			expectedNode:                 ySpecTemplateSpecMap,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec map",
+			expectedNode:      ySpecTemplateSpecMap,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1],
 		},
 		{
-			note:                         "expected .spec.template.spec.containers scalar",
-			expectedNode:                 ySpecTemplateSpecContainersScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[0],
-			expectedFollowingContentNode: ySpecTemplateSpecContainersSequence,
-			gotFollowingContentNode:      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].FollowingContentNode,
+			note:              "expected .spec.template.spec.containers scalar",
+			expectedNode:      ySpecTemplateSpecContainersScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[0],
 		},
 		{
-			note:                         "expected .spec.template.spec.containers sequence",
-			expectedNode:                 ySpecTemplateSpecContainersSequence,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec.containers sequence",
+			expectedNode:      ySpecTemplateSpecContainersSequence,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1],
 		},
 		{
-			note:                         "expected .spec.template.spec.containers[0] map",
-			expectedNode:                 ySpecTemplateSpecContainersZeroMap,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec.containers[0] map",
+			expectedNode:      ySpecTemplateSpecContainersZeroMap,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0],
 		},
 		{
-			note:                         "expected .spec.template.spec.containers[0].name scalar",
-			expectedNode:                 ySpecTemplateSpecContainersZeroNameScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[0].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[0],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec.containers[0].name scalar",
+			expectedNode:      ySpecTemplateSpecContainersZeroNameScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[0].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[0],
 		},
 		{
-			note:                         "expected .spec.template.spec.containers[0].name value scalar",
-			expectedNode:                 ySpecTemplateSpecContainersZeroNameValueScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[1].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[1],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec.containers[0].name value scalar",
+			expectedNode:      ySpecTemplateSpecContainersZeroNameValueScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[1].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[1],
 		},
 
 		{
-			note:                         "expected .spec.template.spec.containers[0].command scalar",
-			expectedNode:                 ySpecTemplateSpecContainersZeroCommandScalar,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[2].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[2],
-			expectedPreviousLineNode:     ySpecTemplateSpecContainersZeroNameScalar,
-			gotPreviousLineNode:          node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[2].PreviousLineNode,
-			expectedFollowingContentNode: ySpecTemplateSpecContainersZeroCommandSequence,
-			gotFollowingContentNode:      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[2].FollowingContentNode,
+			note:              "expected .spec.template.spec.containers[0].command scalar",
+			expectedNode:      ySpecTemplateSpecContainersZeroCommandScalar,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[2].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[2],
 		},
 
 		{
-			note:                         "expected .spec.template.spec.containers[0].command sequence",
-			expectedNode:                 ySpecTemplateSpecContainersZeroCommandSequence,
-			gotNode:                      node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[3].Node,
-			confirmConfigNode:            node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[3],
-			expectedFollowingContentNode: nil,
-			gotFollowingContentNode:      nil,
+			note:              "expected .spec.template.spec.containers[0].command sequence",
+			expectedNode:      ySpecTemplateSpecContainersZeroCommandSequence,
+			gotNode:           node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[1].NodeContent[0].NodeContent[3].Node,
+			confirmConfigNode: node.Content[0].Content[1].Content[1].Content[1].Content[1].Content[0].Content[3],
 		},
 	}
 
 	for _, tc := range testCases {
-		// Node
 		//   confirm we didn't mess up the tests
 		if tc.confirmConfigNode != tc.expectedNode {
 			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.confirmConfigNode)
 		}
 		if tc.gotNode != tc.expectedNode {
 			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedNode, tc.gotNode)
-		}
-
-		// PreviousLineNode
-		switch {
-		case tc.gotPreviousLineNode != nil && tc.gotPreviousLineNode.Node != tc.expectedPreviousLineNode:
-			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, tc.gotPreviousLineNode.Node)
-		case tc.gotPreviousLineNode == nil && tc.expectedPreviousLineNode != nil:
-			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedPreviousLineNode, nil)
-		}
-
-		// FollowingContentNode
-		switch {
-		case tc.gotFollowingContentNode != nil && tc.gotFollowingContentNode.Node != tc.expectedFollowingContentNode:
-			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, tc.gotFollowingContentNode.Node)
-		case tc.gotFollowingContentNode == nil && tc.expectedFollowingContentNode != nil:
-			t.Errorf("Description: %s: main.WalkConvertYamlNodeToMainNode(...): -expected, +got:\n-%#v\n+%#v\n", tc.note, tc.expectedFollowingContentNode, nil)
 		}
 	}
 
@@ -381,12 +330,20 @@ spec:
 
 	testCases := []testCase{
 		{
+			path:         ".",
+			expectedNode: node.NodeContent[0],
+		},
+		{
 			path:         ".spec",
 			expectedNode: node.NodeContent[0].NodeContent[0],
 		},
 		{
 			path:         ".spec.template.spec",
 			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[0],
+		},
+		{
+			path:         ".spec.template.spec.",
+			expectedNode: node.NodeContent[0].NodeContent[1].NodeContent[1].NodeContent[1],
 		},
 		{
 			path:         ".spec.template.spec.containers",
@@ -415,10 +372,10 @@ spec:
 		gotNode, err := walkToNodeForPath(node, tc.path, 0)
 		if err != nil {
 			t.Errorf("Description: %s: main.walkToNodeForPath(...): \n-expected:\nno error\n+got:\n%#v\n", tc.path, err)
+			continue
 		}
 		if gotNode != tc.expectedNode {
 			t.Errorf("Description: %s: main.walkToNodeForPath(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.path, tc.expectedNode.Node, gotNode.Node)
-			continue
 		}
 	}
 }
@@ -808,8 +765,8 @@ spec:
 		{
 			note: "ditto 1",
 			expectedErrs: ValidationErrors{
-				fmt.Errorf("validation error: want '.spec.template.spec.initContainers[0].name' to be first, got '.spec.template.spec.initContainers[0].args'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.initContainers[0].args' to be after '.spec.template.spec.initContainers[0].name', is before"),
+				fmt.Errorf("validation error: want '.spec.template.spec.initContainers[0].name' to be first, got '.spec.template.spec.initContainers[0].args'"),
 				fmt.Errorf("validation error: missing required key '.spec.template.spec.initContainers[1].name'"),
 			},
 			configYamls: []string{`---
@@ -845,10 +802,10 @@ spec:
 		{
 			note: "ditto 2",
 			expectedErrs: ValidationErrors{
-				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet' to be after '.spec.template.spec.containers[0].readinessProbe.periodSeconds', is before"),
-				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.path' to be after '.spec.template.spec.containers[0].readinessProbe.httpGet.port', is before"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
 			},
 			configYamls: []string{`---
 kind: Deployment # first
@@ -887,10 +844,10 @@ spec:
 		{
 			note: "ditto 3, different config schema",
 			expectedErrs: ValidationErrors{
-				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet' to be after '.spec.template.spec.containers[0].readinessProbe.periodSeconds', is before"),
-				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.periodSeconds' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet'"),
 				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.path' to be after '.spec.template.spec.containers[0].readinessProbe.httpGet.port', is before"),
+				fmt.Errorf("validation error: want '.spec.template.spec.containers[0].readinessProbe.httpGet.port' to be first, got '.spec.template.spec.containers[0].readinessProbe.httpGet.path'"),
 			},
 			configYamls: []string{
 				`---
@@ -930,6 +887,153 @@ spec:
             port: http
             scheme: HTTP
           periodSeconds: 10`,
+		},
+		{
+			note:         "ditto 4: list ending in dot",
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+apiVersion: core/v1  # first, required
+kind: DeploymentList  # required
+metadata:  # required
+  name: TODO  # first, required
+items: []  # ditto=Deployment.`,
+				`apiVersion: core/v1  # first, required
+kind: Deployment # required
+spec:  # required
+  template:  # required
+    spec:  # required
+      initContainers: []  # first, ditto=.spec.template.spec.containers
+      containers:  # required
+      - name: cool-app  # first, required
+        command:  # preferred
+        - asdf
+        args:  # preferred
+        - asdf`},
+			fileYaml: `---
+apiVersion: core/v1
+kind: DeploymentList
+metadata:
+  name: TODO
+items:
+- apiVersion: core/v1
+  kind: Deployment
+  spec:
+    template:
+      spec:
+        containers:
+        - name: cool-app
+          command:
+          - asdf
+        - name: uncool-app
+          command:
+          - asdf`,
+		},
+		{
+			note: "ditto 5: list ending in dot, errors",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: want '.items[0].spec.template.spec.containers[0].command' to be after '.items[0].spec.template.spec.containers[0].name', is before"),
+				fmt.Errorf("validation error: want '.items[0].spec.template.spec.containers[0].name' to be first, got '.items[0].spec.template.spec.containers[0].command'"),
+				fmt.Errorf("validation error: want '.items[1].spec.template.spec.initContainers[1].command' to be after '.items[1].spec.template.spec.initContainers[1].name', is before"),
+				fmt.Errorf("validation error: want '.items[1].spec.template.spec.initContainers[1].name' to be first, got '.items[1].spec.template.spec.initContainers[1].command'"),
+				fmt.Errorf("validation error: want '.items[1].spec.template.spec.containers[1].command' to be after '.items[1].spec.template.spec.containers[1].name', is before"),
+				fmt.Errorf("validation error: want '.items[1].spec.template.spec.containers[1].name' to be first, got '.items[1].spec.template.spec.containers[1].command'"),
+			},
+			configYamls: []string{
+				`---
+apiVersion: core/v1  # first, required
+kind: DeploymentList  # required
+metadata:  # required
+  name: TODO  # first, required
+items: []  # ditto=Deployment.`,
+				`apiVersion: core/v1  # first, required
+kind: Deployment # required
+spec:  # required
+  template:  # required
+    spec:  # required
+      initContainers: []  # first, ditto=.spec.template.spec.containers
+      containers:  # required
+      - name: cool-app  # first, required
+        command:  # preferred
+        - asdf
+        args:  # preferred
+        - asdf`},
+			fileYaml: `---
+apiVersion: core/v1
+kind: DeploymentList
+metadata:
+  name: example
+items:
+- apiVersion: core/v1
+  kind: Deployment
+  spec:
+    template:
+      spec:
+        containers:
+        - command:
+          - asdf
+          name: cool-app
+          asdf: fdsa
+        - name: uncool-app
+          command:
+          - asdf
+- apiVersion: core/v1
+  kind: Deployment
+  spec:
+    template:
+      spec:
+        initContainers:
+        - name: cool-app
+          command:
+          - asdf
+        - command:
+          - asdf
+          name: uncool-app
+          grewq: fdsa
+        containers:
+        - name: cool-app
+          command:
+          - asdf
+        - command:
+          - asdf
+          name: uncool-app
+          grewq: fdsa`,
+		},
+		{
+			note: "ditto 6: other ending in dot",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: missing required key '.spec.template.spec'"),
+				fmt.Errorf("validation error: want '.spec.template.testThis[0].containers[0].command' to be after '.spec.template.testThis[0].containers[0].name', is before"),
+				fmt.Errorf("validation error: want '.spec.template.testThis[0].containers[0].name' to be first, got '.spec.template.testThis[0].containers[0].command'"),
+			},
+			configYamls: []string{
+				`apiVersion: core/v1  # first, required
+kind: Deployment # required
+spec:  # required
+  template:  # required
+    testThis: []  # ditto=.spec.template.spec.
+    spec:  # required
+      initContainers: []  # first, ditto=.spec.template.spec.containers
+      containers:  # required
+      - name: cool-app  # first, required
+        command:  # preferred
+        - asdf
+        args:  # preferred
+        - asdf`},
+			fileYaml: `---
+apiVersion: core/v1
+kind: Deployment
+spec:
+  template:
+    testThis:
+    - containers:
+      - command:
+        - asdf
+        name: cool-app
+        asdf: fdsa
+      - name: uncool-app
+        command:
+        - asdf`,
 		},
 		{
 			note:         "overrides 1",
@@ -1309,6 +1413,53 @@ spec:
             - asdf
     someOtherThing:
       asdf: fdsa
+`,
+		},
+		{
+			note:         "ditto: other ending in dot",
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`apiVersion: core/v1  # first, required
+kind: Asdf # required
+spec:  # required
+  template:  # required
+    testThis: []  # ditto=.spec.template.spec.
+    spec:  # required
+      initContainers: []  # first, ditto=.spec.template.spec.containers
+      containers:  # required
+      - name: cool-app  # first, required
+        command:  # preferred
+        - asdf
+        args:  # preferred
+        - asdf`},
+			fileYaml: `# predictable-yaml: ignore-requireds
+apiVersion: core/v1
+kind: Asdf
+spec:
+  template:
+    testThis:
+    - containers:
+      - command:
+        - asdf
+        name: cool-app
+        asdf: fdsa
+      - name: uncool-app
+        command:
+        - asdf`,
+			expectedYaml: `# predictable-yaml: ignore-requireds
+apiVersion: core/v1
+kind: Asdf
+spec:
+  template:
+    testThis:
+      - containers:
+          - name: cool-app
+            command:
+              - asdf
+            asdf: fdsa
+          - name: uncool-app
+            command:
+              - asdf
 `,
 		},
 		{
