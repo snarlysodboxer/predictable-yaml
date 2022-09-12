@@ -70,3 +70,6 @@ __Config comments in target files must be before, inline, or after the first lin
 
 ## Tests
 * Run with `go test ./...`.
+
+## Debugging with Delve
+* `dlv test pkg/compare/compare* -- -test.run TestWalkAndCompare`

@@ -40,6 +40,7 @@ var (
 	indentationLevel        int
 	unmatchedToBeginning    bool
 	ignorePreferreds        bool
+	validate                bool
 )
 
 // fixCmd represents the fix command
@@ -93,12 +94,22 @@ var fixCmd = &cobra.Command{
 				UnmatchedToBeginning: unmatchedToBeginning,
 				IgnorePreferreds:     ignorePreferreds,
 			}
+			// only sort if validation fails
+			if validate {
+				errs := compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+				if len(errs) == 0 {
+					continue
+				}
+			}
+
 			errs := compare.WalkAndSort(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has fix errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
 				continue
 			}
+
+			// setup to check if contents changed, re-add `---` if it was there before
 			var buf bytes.Buffer
 			firstLine := bytes.Split(existingFileContents, []byte(`\n`))[0]
 			hasTripleDash := regexp.MustCompile(`^---\s`).Match(firstLine)
@@ -126,13 +137,14 @@ var fixCmd = &cobra.Command{
 				fileContents = indentation.FixLists(fileContents, reduceIndentationBy)
 			}
 
+			// check if contents changed
 			fileContentsStr := string(fileContents)
 			existingFileContentsStr := string(existingFileContents)
 			if fileContentsStr != existingFileContentsStr {
 				shouldPrompt := false
 				switch {
 				case promptIfLineCountChange:
-					if countLines(fileContentsStr, '\n') != countLines(existingFileContentsStr, '\n') {
+					if countLines(strings.TrimSpace(fileContentsStr), '\n') != countLines(strings.TrimSpace(existingFileContentsStr), '\n') {
 						shouldPrompt = true
 					}
 				case prompt:
@@ -141,7 +153,7 @@ var fixCmd = &cobra.Command{
 				doFix := true
 				if shouldPrompt {
 					fmt.Printf("\n%s", diff.Diff(existingFileContentsStr, fileContentsStr))
-					doFix = promptForConfirmation("Do you want to write these changes?")
+					doFix = promptForConfirmation(fmt.Sprintf("Do you want to write these changes to '%s'?", filePath))
 				}
 
 				if doFix {
@@ -175,6 +187,7 @@ func init() {
 	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 0, "reduce indentation level for lists by number")
 	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().BoolVar(&ignorePreferreds, "ignore-preferred", false, "do not add lines marked as preferred when adding missing keys")
+	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
 }
 
 func countLines(str string, r rune) int {
