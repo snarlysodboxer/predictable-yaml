@@ -1148,13 +1148,13 @@ spec:
 
 func TestWalkAndSort(t *testing.T) {
 	type testCase struct {
-		note             string
-		toBeginning      bool
-		ignorePreferreds bool
-		expectedErrs     ValidationErrors
-		configYamls      []string
-		fileYaml         string
-		expectedYaml     string
+		note          string
+		toBeginning   bool
+		addPreferreds bool
+		expectedErrs  ValidationErrors
+		configYamls   []string
+		fileYaml      string
+		expectedYaml  string
 	}
 
 	testCases := []testCase{
@@ -1498,9 +1498,10 @@ spec:
 `,
 		},
 		{
-			note:         "missing required 2: include preferreds",
-			toBeginning:  true,
-			expectedErrs: ValidationErrors{},
+			note:          "missing required 2: include preferreds",
+			toBeginning:   true,
+			expectedErrs:  ValidationErrors{},
+			addPreferreds: true,
 			configYamls: []string{
 				`---
 kind: Pod  # first
@@ -1560,10 +1561,10 @@ spec:
 `,
 		},
 		{
-			note:             "missing required 3: ignorePreferreds",
-			toBeginning:      true,
-			ignorePreferreds: true,
-			expectedErrs:     ValidationErrors{},
+			note:          "missing required 3: addPreferreds",
+			toBeginning:   true,
+			addPreferreds: true,
+			expectedErrs:  ValidationErrors{},
 			configYamls: []string{
 				`---
 kind: Pod  # first
@@ -1655,7 +1656,7 @@ spec:
 		}
 
 		// do it
-		sortConfs := SortConfigs{configMap, fileConfigs, tc.toBeginning, false}
+		sortConfs := SortConfigs{configMap, fileConfigs, tc.toBeginning, tc.addPreferreds}
 		gotErrs := WalkAndSort(configMap[fileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
