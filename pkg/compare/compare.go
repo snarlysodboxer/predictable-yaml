@@ -54,7 +54,7 @@ type SortConfigs struct {
 	ConfigMap            ConfigMap
 	FileConfigs          FileConfigs
 	UnmatchedToBeginning bool
-	IgnorePreferreds     bool
+	AddPreferreds        bool
 }
 
 // KeyValuePair represent a scalar key node, and it's related value node
@@ -357,7 +357,7 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 
 		// possibly add missing required and preferred keys/values
 		if (!found && configPair.KeyNode.Required && !sortConfs.FileConfigs.IgnoreRequireds) ||
-			(!found && configPair.KeyNode.Preferred && !sortConfs.IgnorePreferreds && !sortConfs.FileConfigs.IgnoreRequireds) {
+			(!found && configPair.KeyNode.Preferred && sortConfs.AddPreferreds && !sortConfs.FileConfigs.IgnoreRequireds) {
 			newValueYamlNode := &yaml.Node{
 				Kind:  configPair.ValueNode.Node.Kind,
 				Value: configPair.ValueNode.Node.Value,

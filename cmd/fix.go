@@ -39,7 +39,7 @@ var (
 	reduceIndentationBy     int
 	indentationLevel        int
 	unmatchedToBeginning    bool
-	ignorePreferreds        bool
+	addPreferreds           bool
 	validate                bool
 )
 
@@ -92,7 +92,7 @@ var fixCmd = &cobra.Command{
 				ConfigMap:            configMap,
 				FileConfigs:          fileConfigs,
 				UnmatchedToBeginning: unmatchedToBeginning,
-				IgnorePreferreds:     ignorePreferreds,
+				AddPreferreds:        addPreferreds,
 			}
 			// only sort if validation fails
 			if validate {
@@ -184,9 +184,9 @@ func init() {
 	fixCmd.PersistentFlags().BoolVar(&prompt, "prompt", true, "show diff and prompt before making changes")
 	fixCmd.PersistentFlags().BoolVar(&promptIfLineCountChange, "prompt-if-line-count-change", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().IntVar(&indentationLevel, "indentation-level", 2, "set yaml.v3 indentation spaces")
-	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 0, "reduce indentation level for lists by number")
+	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 2, "reduce indentation level for lists by number")
 	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
-	fixCmd.PersistentFlags().BoolVar(&ignorePreferreds, "ignore-preferred", false, "do not add lines marked as preferred when adding missing keys")
+	fixCmd.PersistentFlags().BoolVar(&addPreferreds, "add-preferred", false, "add lines marked as preferred when adding missing keys")
 	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
 }
 

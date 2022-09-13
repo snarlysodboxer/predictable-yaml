@@ -66,7 +66,7 @@ __Config comments in target files must be before, inline, or after the first lin
 * Lines in the target file that are not in the config file will be moved to the end by default.
     * Change to the begining with the flag `--unmatched-to-beginning`.
 * Missing required keys will be added unless `ignore-requireds` is set as a per file override.
-* Lines can be set to `# preferred` to allow linting to pass without them, but make the fixer add them when fixing, unless the `--ignore-preferred` flag is set.
+* Lines can be set to `# preferred` to allow linting to pass without them, but make the fixer add them when fixing, and the `--add-preferred` flag is set.
 
 ## Tests
 * Run with `go test ./...`.
