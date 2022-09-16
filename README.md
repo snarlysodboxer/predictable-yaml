@@ -3,6 +3,16 @@
 ## Status
 This is alpha, but ready for use.
 
+## Install
+Download the binary for your system and then move it in place
+```shell
+mv ~/Downloads/preditable-yaml-darwin-amd64 /usr/local/bin/preditable-yaml
+chmod ug+x /usr/local/bin/preditable-yaml
+# on MacOS
+sudo xattr -r -d com.apple.quarantine /usr/local/bin/preditable-yaml
+```
+OR just clone the repo and `go install`.
+
 ## Usage
 * `go run main.go --help` OR
 * `go build main.go -o predictable-yaml`

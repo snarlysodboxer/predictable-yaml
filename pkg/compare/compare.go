@@ -73,21 +73,24 @@ func GetFileConfigs(node *Node) FileConfigs {
 			if comment == "" {
 				continue
 			}
-			if !strings.Contains(comment, "predictable-yaml:") {
-				continue
-			}
-			comment = strings.ReplaceAll(comment, "#", "")
-			comment = strings.ReplaceAll(comment, " ", "")
-			comment = strings.Split(comment, ":")[1]
-			splitStrings := strings.Split(comment, ",")
-			for _, str := range splitStrings {
-				switch {
-				case str == "ignore":
-					fileConfigs.Ignore = true
-				case str == "ignore-requireds":
-					fileConfigs.IgnoreRequireds = true
-				case strings.Contains(str, "kind"):
-					fileConfigs.Kind = strings.Split(str, "=")[1]
+			commentLines := strings.Split(comment, "\n")
+			for _, commentLine := range commentLines {
+				if !strings.Contains(commentLine, "predictable-yaml:") {
+					continue
+				}
+				commentLine = strings.ReplaceAll(commentLine, "#", "")
+				commentLine = strings.ReplaceAll(commentLine, " ", "")
+				commentLine = strings.Split(commentLine, ":")[1]
+				splitStrings := strings.Split(commentLine, ",")
+				for _, str := range splitStrings {
+					switch {
+					case str == "ignore":
+						fileConfigs.Ignore = true
+					case str == "ignore-requireds":
+						fileConfigs.IgnoreRequireds = true
+					case strings.Contains(str, "kind"):
+						fileConfigs.Kind = strings.Split(str, "=")[1]
+					}
 				}
 			}
 		}

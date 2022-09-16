@@ -274,6 +274,35 @@ spec:
 			expectedIgnoreRequired: false,
 			expectedIgnore:         false,
 		},
+		{
+			note: "multiline comments 1: with colon",
+			yaml: `---
+# TODO: comment
+# this comment
+# this comment
+# predictable-yaml: ignore-requireds
+apiVersion: TODO
+kind: Deployment
+spec:
+  asdf: fdsa`,
+			expectedKind:           "Deployment",
+			expectedIgnoreRequired: true,
+			expectedIgnore:         false,
+		},
+		{
+			note: "multiline comments 2",
+			yaml: `---
+# predictable-yaml: ignore-requireds
+# this comment
+# this comment
+apiVersion: TODO
+kind: Deployment
+spec:
+  asdf: fdsa`,
+			expectedKind:           "Deployment",
+			expectedIgnoreRequired: true,
+			expectedIgnore:         false,
+		},
 	}
 
 	for _, tc := range testCases {
