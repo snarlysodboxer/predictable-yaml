@@ -45,7 +45,6 @@ var lintCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, filePaths []string) {
-		// read files in configDir, populate configMap
 		configMap := getConfigMap()
 
 		success := true

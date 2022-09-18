@@ -47,44 +47,99 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgDir, "config-dir", "~/.predictable-yaml", "directory containing config file(s), (default is $HOME/.predictable-yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgDir, "config-dir", "", "directory containing config file(s), (default is $HOME/.predictable-yaml)")
 	if strings.HasPrefix(cfgDir, "~/") {
-		dirname, _ := os.UserHomeDir()
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
 		cfgDir = filepath.Join(dirname, cfgDir[2:])
 	}
 }
 
+// getConfigMap reads files in configDir(s), populating a configMap
 func getConfigMap() compare.ConfigMap {
-	configMap := compare.ConfigMap{}
-	configFiles, err := ioutil.ReadDir(cfgDir)
+	configDirs, err := getConfigDirs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, file := range configFiles {
-		if file.IsDir() {
-			continue
-		}
-		re := regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
-		if !re.MatchString(file.Name()) {
-			continue
-		}
-		cNode := &yaml.Node{}
-		path := fmt.Sprintf("%s/%s", cfgDir, file.Name())
-		_, err := getYAML(cNode, path)
+
+	configMap := compare.ConfigMap{}
+	for _, dir := range configDirs {
+		configFiles, err := ioutil.ReadDir(dir)
 		if err != nil {
-			log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
+			log.Fatal(err)
 		}
-		configNode := &compare.Node{Node: cNode}
-		compare.WalkConvertYamlNodeToMainNode(configNode)
-		compare.WalkParseLoadConfigComments(configNode)
-		fileConfigs := compare.GetFileConfigs(configNode)
-		if fileConfigs.Kind == "" {
-			log.Fatalf("error determining schema for config file: %s: %v", path, err)
+		for _, file := range configFiles {
+			if file.IsDir() {
+				continue
+			}
+			re := regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
+			if !re.MatchString(file.Name()) {
+				continue
+			}
+			cNode := &yaml.Node{}
+			path := fmt.Sprintf("%s/%s", dir, file.Name())
+			_, err := getYAML(cNode, path)
+			if err != nil {
+				log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
+			}
+			configNode := &compare.Node{Node: cNode}
+			compare.WalkConvertYamlNodeToMainNode(configNode)
+			compare.WalkParseLoadConfigComments(configNode)
+			fileConfigs := compare.GetFileConfigs(configNode)
+			if fileConfigs.Kind == "" {
+				log.Fatalf("error determining schema for config file: %s: %v", path, err)
+			}
+			if _, ok := configMap[fileConfigs.Kind]; !ok {
+				configMap[fileConfigs.Kind] = configNode
+			}
 		}
-		configMap[fileConfigs.Kind] = configNode
 	}
 
 	return configMap
+}
+
+func getConfigDirs() ([]string, error) {
+	if cfgDir != "" {
+		return []string{cfgDir}, nil
+	}
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	configDirs, err := walkFindConfigDirs(workDir, []string{})
+	if err != nil {
+		return nil, err
+	}
+
+	return configDirs, nil
+}
+
+func walkFindConfigDirs(dir string, configDirs []string) ([]string, error) {
+	configDir := fmt.Sprintf("%s/.predictable-yaml", dir)
+	_, err := os.Stat(configDir)
+	if err == nil {
+		configDirs = append(configDirs, configDir)
+	} else {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	if dir == homeDir {
+		return configDirs, nil
+	}
+	parentDir := filepath.Dir(dir)
+	configDirs, err = walkFindConfigDirs(parentDir, configDirs)
+	if err != nil {
+		return nil, err
+	}
+
+	return configDirs, nil
 }
 
 func getYAML(node *yaml.Node, file string) ([]byte, error) {
