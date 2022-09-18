@@ -17,20 +17,23 @@ package indentation
 
 import (
 	"testing"
+
+	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
+	"gopkg.in/yaml.v3"
 )
 
 func TestFixLists(t *testing.T) {
 	type testCase struct {
-		note             string
-		indentationLevel int
-		expected         string
-		yaml             string
+		note     string
+		reduceBy int
+		expected string
+		yaml     string
 	}
 
 	testCases := []testCase{
 		{
-			note:             "deployment",
-			indentationLevel: 2,
+			note:     "deployment",
+			reduceBy: 2,
 			yaml: `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,9 +88,110 @@ spec:
 `,
 		},
 		{
-			note:             "indentationLevel 4",
-			indentationLevel: 4,
-			yaml: `apiVersion: apps/v1
+			note:     "string value that looks like yaml",
+			reduceBy: 2,
+			yaml: `---
+kind: ConfigMap
+containers:
+  - name: cool-app
+    image: example
+    command: # comment about command
+      - asdf
+    args:
+      - fdsa
+      - zxcv
+    asdf: [asdf, fdsa]
+  - name: uncool-app
+    command:
+      - asdf
+      - fdsa
+  - name: mediocre-app
+beta:
+  some-thing:
+    asdf:
+      fdsa:
+        - key: name
+          value: qwer
+data:
+  some-file.yaml: |+
+    asdf:
+      fdsa:
+      - key: name
+        value: qwer
+      - key: fdsa
+        value: qwer
+other:
+  - target:
+      version: v1
+      kind: Deployment
+      name: example
+      namespace: example
+    patch: |-
+      - op: replace
+        path: /spec/strategy/type
+        value: Recreate
+someOtherThing:
+  asdf: fdsa
+another:
+  - patch: |-
+      - op: replace
+        path: /spec/strategy/type
+        value: Recreate
+`,
+			expected: `---
+kind: ConfigMap
+containers:
+- name: cool-app
+  image: example
+  command: # comment about command
+  - asdf
+  args:
+  - fdsa
+  - zxcv
+  asdf: [asdf, fdsa]
+- name: uncool-app
+  command:
+  - asdf
+  - fdsa
+- name: mediocre-app
+beta:
+  some-thing:
+    asdf:
+      fdsa:
+      - key: name
+        value: qwer
+data:
+  some-file.yaml: |+
+    asdf:
+      fdsa:
+      - key: name
+        value: qwer
+      - key: fdsa
+        value: qwer
+other:
+- target:
+    version: v1
+    kind: Deployment
+    name: example
+    namespace: example
+  patch: |-
+    - op: replace
+      path: /spec/strategy/type
+      value: Recreate
+someOtherThing:
+  asdf: fdsa
+another:
+- patch: |-
+    - op: replace
+      path: /spec/strategy/type
+      value: Recreate
+`,
+		},
+		{
+			note:     "reduceBy 4",
+			reduceBy: 4,
+			yaml: `---
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   # comment about name
@@ -113,7 +217,8 @@ spec:
     someOtherThing:
       asdf: fdsa
 `,
-			expected: `apiVersion: apps/v1
+			expected: `---
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   # comment about name
@@ -141,8 +246,8 @@ spec:
 `,
 		},
 		{
-			note:             "other lists",
-			indentationLevel: 2,
+			note:     "other lists",
+			reduceBy: 2,
 			yaml: `asdf:
   - asdf
   - name
@@ -162,7 +267,18 @@ spec:
 		},
 	}
 	for _, tc := range testCases {
-		got := FixLists([]byte(tc.yaml), tc.indentationLevel)
+		yNode := &yaml.Node{}
+		err := yaml.Unmarshal([]byte(tc.yaml), yNode)
+		if err != nil {
+			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
+			continue
+		}
+		fileNode := &compare.Node{Node: yNode}
+		compare.WalkConvertYamlNodeToMainNode(fileNode)
+		got, err := FixLists(fileNode, []byte(tc.yaml), tc.reduceBy)
+		if err != nil {
+			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
+		}
 		if string(got) != tc.expected {
 			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%s\n+got:\n%s\n", tc.note, tc.expected, string(got))
 		}
