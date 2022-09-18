@@ -46,6 +46,8 @@ _See caviats below about fixing_
 * Supports multiple config schema files. Place them in the config directory.
     * Config type can be configured with the comment `# predictable-yaml: kind=my-schema`, but if this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value. If neither are found, an error will be thrown.
     * Target file type will be determined in the same way, however if a matching config is not found, a warning will be output.
+* If the `--config-dir` flag is specified, configs from only that directory will be loaded.
+* If the `--config-dir` flag is not specified, search up the directory tree looking for `.predictable-yaml` directories, loading configs for any schema types it does not already know about.
 * Config files must:
     * Not have comments other than the configuration ones specific to this program.
     * Not have more than one entry in each sequence.
