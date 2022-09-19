@@ -31,7 +31,16 @@ type startStop struct {
 }
 
 // FixLists can unindent lists in yaml. Expects consistent input indentation.
-func FixLists(node *compare.Node, content []byte, reduceBy int) ([]byte, error) {
+func FixLists(content []byte, reduceBy int) ([]byte, error) {
+	// parse yaml
+	yamlNode := &yaml.Node{}
+	err := yaml.Unmarshal(content, yamlNode)
+	if err != nil {
+		return content, err
+	}
+	node := &compare.Node{Node: yamlNode}
+	compare.WalkConvertYamlNodeToMainNode(node)
+
 	// create a slice of lines
 	lines := []string{}
 	scanner := bufio.NewScanner(bytes.NewReader(content))
@@ -42,6 +51,7 @@ func FixLists(node *compare.Node, content []byte, reduceBy int) ([]byte, error) 
 		return []byte{}, err
 	}
 
+	// get the list of lines that start/stop sequences
 	sequences := walkGetStartStopSequences(node, []*startStop{})
 
 	// convert to map
