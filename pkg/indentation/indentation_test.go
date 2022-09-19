@@ -17,9 +17,6 @@ package indentation
 
 import (
 	"testing"
-
-	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
-	"gopkg.in/yaml.v3"
 )
 
 func TestFixLists(t *testing.T) {
@@ -267,15 +264,7 @@ spec:
 		},
 	}
 	for _, tc := range testCases {
-		yNode := &yaml.Node{}
-		err := yaml.Unmarshal([]byte(tc.yaml), yNode)
-		if err != nil {
-			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
-			continue
-		}
-		fileNode := &compare.Node{Node: yNode}
-		compare.WalkConvertYamlNodeToMainNode(fileNode)
-		got, err := FixLists(fileNode, []byte(tc.yaml), tc.reduceBy)
+		got, err := FixLists([]byte(tc.yaml), tc.reduceBy)
 		if err != nil {
 			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
 		}

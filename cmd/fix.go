@@ -127,15 +127,10 @@ var fixCmd = &cobra.Command{
 				log.Printf("File '%s' has encode errors:\n%v\n", filePath, err)
 				continue
 			}
-			fileStat, err := os.Stat(filePath)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
 			fileContents := buf.Bytes()
 			if reduceIndentationBy != 0 {
 				var err error
-				fileContents, err = indentation.FixLists(fileNode, fileContents, reduceIndentationBy)
+				fileContents, err = indentation.FixLists(fileContents, reduceIndentationBy)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -162,9 +157,14 @@ var fixCmd = &cobra.Command{
 				}
 
 				if doFix {
+					fileStat, err := os.Stat(filePath)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 					err = os.WriteFile(filePath, fileContents, fileStat.Mode())
 					if err != nil {
-						log.Printf("File '%s' has write errors:\n%v", filePath, err)
+						log.Printf("File '%s' has write errors:\n%v\n", filePath, err)
 						continue
 					}
 					log.Printf("File '%s' has been fixed!", filePath)
