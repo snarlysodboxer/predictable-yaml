@@ -134,6 +134,10 @@ func walkFindConfigDirs(dir string, configDirs []string) ([]string, error) {
 		return configDirs, nil
 	}
 	parentDir := filepath.Dir(dir)
+	if parentDir == dir {
+		// reached root
+		return configDirs, nil
+	}
 	configDirs, err = walkFindConfigDirs(parentDir, configDirs)
 	if err != nil {
 		return nil, err
