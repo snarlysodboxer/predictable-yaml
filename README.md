@@ -19,20 +19,28 @@ OR just clone the repo and `go install`.
 * `predictable-yaml --help` OR
 * `go install`
 * `predictable-yaml --help`
-* Setup a config dir
+* Setup a `.predictable-yaml` config dir
+    * Use your home directory, or a directory in a repo. See [Config Files](#config-files) for more info.
     * `mkdir ~/.predictable-yaml && cp ./example-configs/* ~/.predictable-yaml/`
 
 Linting Examples:
-* `predictable-yaml lint --config-dir example-configs $(find test-data -name '*\.yaml')`
-* `predictable-yaml lint --config-dir example-configs --quiet $(find test-data -name '*\.valid.yaml')`
-* `docker run -it --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest lint --config-dir example-configs $(find test-data -name '*.yaml')`
+* Use the example configs in this repo:
+    * `predictable-yaml lint --config-dir example-configs test-data`
+* Search my-dir for yaml files, suppress success messages:
+    * `predictable-yaml lint --quiet my-dir`
+* Run with Docker:
+    * `docker run -it --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest lint $(find my-dir -name '*.yaml')`
 
 Fixer Examples:
 _See caviats below about fixing_
-* `predictable-yaml fix --config-dir example-configs $(find test-data -name '*\.yaml')`
-* `predictable-yaml fix --config-dir example-configs --indentation-level 2 --reduce-list-indentation-by 2 $(find test-data -name '*\.yaml')`
-* `predictable-yaml fix --config-dir example-configs --prompt-if-line-count-change $(find test-data -name '*\.yaml')`
-* `docker run -it --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest fix --config-dir example-configs $(find test-data -name '*.yaml')`
+* Use the example configs in this repo:
+    * `predictable-yaml fix --config-dir example-configs $(find test-data -name '*\.yaml')`
+* Use four spaces and more deeply indented lists:
+    * `predictable-yaml fix --indentation-level 4 --reduce-list-indentation-by 0 test-data`
+* Only prompt if the line count changes:
+    * `predictable-yaml fix --prompt-if-line-count-change test-data`
+* Run with Docker:
+    * `docker run -it --rm -v $(pwd):/code -w /code snarlysodboxer/predictable-yaml:latest fix test-data`
 
 ## Functionality
 * Uses one config schema file per target file schema. E.G. One config file for a Kubernetes `Deployment` is used to lint any Deployment target files.
@@ -41,6 +49,7 @@ _See caviats below about fixing_
 * Algorithm
     * Lines in the target file that exist in the config file must be in the same order as the config file, but there can be any amount of lines inbetween them.
     * Lines can be configured to be first, required, or to 'ditto' the configs under another line.
+* Pass a directory path to search it recursively for yaml files, or file paths to just test those files, or any combination of the two.
 
 ## Config files
 * Supports multiple config schema files. Place them in the config directory.

@@ -45,7 +45,7 @@ var (
 
 // fixCmd represents the fix command
 var fixCmd = &cobra.Command{
-	Use:   "fix [flags] <file-path> ...",
+	Use:   "fix [flags] <file-or-dir-path> ...",
 	Short: "Lint YAML key order",
 	Long:  `Compare YAML files to config files, reordering keys.`,
 	Args: func(cmd *cobra.Command, args []string) error {
@@ -65,7 +65,13 @@ var fixCmd = &cobra.Command{
 		configMap := getConfigMap()
 
 		success := true
-		for _, filePath := range filePaths {
+
+		allFilePaths, err := getAllFilePaths(filePaths)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, filePath := range allFilePaths {
 			// setup
 			fNode := &yaml.Node{}
 			existingFileContents, err := getYAML(fNode, filePath)
@@ -79,7 +85,8 @@ var fixCmd = &cobra.Command{
 				continue
 			}
 			if fileConfigs.Kind == "" {
-				log.Fatalf("error: unable to determine a schema for target file: %s", filePath)
+				log.Printf("WARNING: unable to determine a schema for target file: %s", filePath)
+				continue
 			}
 			configNode, ok := configMap[fileConfigs.Kind]
 			if !ok {
@@ -156,21 +163,21 @@ var fixCmd = &cobra.Command{
 					doFix = promptForConfirmation(fmt.Sprintf("Do you want to write these changes to '%s'?", filePath))
 				}
 
-				if doFix {
-					fileStat, err := os.Stat(filePath)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-					err = os.WriteFile(filePath, fileContents, fileStat.Mode())
-					if err != nil {
-						log.Printf("File '%s' has write errors:\n%v\n", filePath, err)
-						continue
-					}
-					log.Printf("File '%s' has been fixed!", filePath)
-				} else {
+				if !doFix {
 					log.Printf("File '%s' has been skipped!", filePath)
+					continue
 				}
+				fileStat, err := os.Stat(filePath)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				err = os.WriteFile(filePath, fileContents, fileStat.Mode())
+				if err != nil {
+					log.Printf("File '%s' has write errors:\n%v\n", filePath, err)
+					continue
+				}
+				log.Printf("File '%s' has been fixed!", filePath)
 			}
 		}
 
