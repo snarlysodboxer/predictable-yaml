@@ -67,7 +67,8 @@ var lintCmd = &cobra.Command{
 				continue
 			}
 			if fileConfigs.Kind == "" {
-				log.Fatalf("WARNING: unable to determine a schema for target file: %s", filePath)
+				log.Printf("WARNING: unable to determine a schema for target file: %s", filePath)
+				continue
 			}
 			configNode, ok := configMap[fileConfigs.Kind]
 			if !ok {
