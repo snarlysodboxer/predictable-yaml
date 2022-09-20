@@ -28,7 +28,7 @@ import (
 
 // lintCmd represents the lint command
 var lintCmd = &cobra.Command{
-	Use:   "lint [flags] <file-path> ...",
+	Use:   "lint [flags] <file-or-dir-path> ...",
 	Short: "Lint YAML key order",
 	Long: `Compare YAML files to config files, checking for matching
     key order, missing required keys, and first key in sequence or map.`,
@@ -47,8 +47,13 @@ var lintCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, filePaths []string) {
 		configMap := getConfigMap()
 
+		allFilePaths, err := getAllFilePaths(filePaths)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		success := true
-		for _, filePath := range filePaths {
+		for _, filePath := range allFilePaths {
 			// setup
 			fNode := &yaml.Node{}
 			_, err := getYAML(fNode, filePath)
@@ -62,7 +67,7 @@ var lintCmd = &cobra.Command{
 				continue
 			}
 			if fileConfigs.Kind == "" {
-				log.Fatalf("error: unable to determine a schema for target file: %s", filePath)
+				log.Fatalf("WARNING: unable to determine a schema for target file: %s", filePath)
 			}
 			configNode, ok := configMap[fileConfigs.Kind]
 			if !ok {

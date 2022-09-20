@@ -142,6 +142,36 @@ func walkFindConfigDirs(dir string, configDirs []string) ([]string, error) {
 	return configDirs, nil
 }
 
+// getAllFilePaths checks for paths that are directories, searching them for yaml files
+func getAllFilePaths(filePaths []string) ([]string, error) {
+	isYamlFile := regexp.MustCompile(`.*\.(yaml|yml)$`)
+	allFilePaths := []string{}
+	for _, filePath := range filePaths {
+		fileStat, err := os.Stat(filePath)
+		if err != nil {
+			return filePaths, err
+		}
+		if !fileStat.IsDir() {
+			allFilePaths = append(allFilePaths, filePath)
+			continue
+		}
+		err = filepath.Walk(filePath, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() && isYamlFile.MatchString(info.Name()) {
+				allFilePaths = append(allFilePaths, p)
+			}
+			return nil
+		})
+		if err != nil {
+			return filePaths, err
+		}
+	}
+
+	return allFilePaths, nil
+}
+
 func getYAML(node *yaml.Node, file string) ([]byte, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
