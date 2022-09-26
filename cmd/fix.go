@@ -28,6 +28,7 @@ import (
 	"github.com/kylelemons/godebug/diff"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/indentation"
+	"github.com/snarlysodboxer/predictable-yaml/pkg/whitespace"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -41,6 +42,9 @@ var (
 	unmatchedToBeginning    bool
 	addPreferreds           bool
 	validate                bool
+	preserveEmptyLines      bool
+	preserveComments        bool
+	disableAllExperiments   bool
 )
 
 // fixCmd represents the fix command
@@ -135,12 +139,29 @@ var fixCmd = &cobra.Command{
 				continue
 			}
 			fileContents := buf.Bytes()
-			if reduceIndentationBy != 0 {
-				var err error
-				fileContents, err = indentation.FixLists(fileContents, reduceIndentationBy)
-				if err != nil {
-					log.Println(err)
-					continue
+
+			if !disableAllExperiments {
+				if reduceIndentationBy != 0 {
+					var err error
+					fileContents, err = indentation.FixLists(fileContents, reduceIndentationBy)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+				}
+				if preserveComments {
+					fileContents, err = whitespace.PreserveComments(existingFileContents, fileContents)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+				}
+				if preserveEmptyLines {
+					fileContents, err = whitespace.PreserveEmptyLines(existingFileContents, fileContents)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 				}
 			}
 
@@ -159,7 +180,7 @@ var fixCmd = &cobra.Command{
 				}
 				doFix := true
 				if shouldPrompt {
-					fmt.Printf("\n%s", diff.Diff(existingFileContentsStr, fileContentsStr))
+					fmt.Printf("\n%s\n", diff.Diff(existingFileContentsStr, fileContentsStr))
 					doFix = promptForConfirmation(fmt.Sprintf("Do you want to write these changes to '%s'?", filePath))
 				}
 
@@ -200,6 +221,9 @@ func init() {
 	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().BoolVar(&addPreferreds, "add-preferred", false, "add lines marked as preferred when adding missing keys")
 	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
+	fixCmd.PersistentFlags().BoolVar(&preserveEmptyLines, "preserve-empty-lines", true, "attempt to preserve empty lines that are in the original")
+	fixCmd.PersistentFlags().BoolVar(&preserveComments, "preserve-comments", true, "attempt to preserve spaces before comments")
+	fixCmd.PersistentFlags().BoolVarP(&disableAllExperiments, "disable-all-experiments", "d", false, "disable all experimental features. preserve-empty-lines, preserve-comments, and reduce-list-indentation-by.")
 }
 
 func countLines(str string, r rune) int {

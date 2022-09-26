@@ -16,9 +16,8 @@ limitations under the License.
 package indentation
 
 import (
-	"bufio"
-	"bytes"
 	"regexp"
+	"strings"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"gopkg.in/yaml.v3"
@@ -41,23 +40,14 @@ func FixLists(content []byte, reduceBy int) ([]byte, error) {
 	node := &compare.Node{Node: yamlNode}
 	compare.WalkConvertYamlNodeToMainNode(node)
 
-	// create a slice of lines
-	lines := []string{}
-	scanner := bufio.NewScanner(bytes.NewReader(content))
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		return []byte{}, err
-	}
-
 	// get the list of lines that start/stop sequences
-	sequences := walkGetStartStopSequences(node, []*startStop{})
+	sequences := walkGetStartStopSequences(node, []startStop{})
 
 	// convert to map
-	lineMap := map[int]string{}
+	lines := strings.Split(string(content), "\n")
+	linesMap := map[int]string{} // zero based, get consistent
 	for index, line := range lines {
-		lineMap[index] = line
+		linesMap[index] = line
 	}
 
 	// unindent those lines in the map by reduceBy spaces
@@ -68,26 +58,30 @@ func FixLists(content []byte, reduceBy int) ([]byte, error) {
 	firstNSpaces := regexp.MustCompile(fmtStr)
 	for _, ss := range sequences {
 		if ss.goesToEnd {
-			for i := ss.start; i <= len(lineMap)-1; i++ {
-				lineMap[i] = string(firstNSpaces.ReplaceAll([]byte(lineMap[i]), []byte{}))
+			for i := ss.start; i <= len(linesMap)-1; i++ {
+				linesMap[i] = string(firstNSpaces.ReplaceAll([]byte(linesMap[i]), []byte{}))
 			}
 			continue
 		}
 		for i := ss.start; i <= ss.stop; i++ {
-			lineMap[i] = string(firstNSpaces.ReplaceAll([]byte(lineMap[i]), []byte{}))
+			linesMap[i] = string(firstNSpaces.ReplaceAll([]byte(linesMap[i]), []byte{}))
 		}
 	}
 
 	// reassemble
 	newContent := ""
-	for i := 0; i < len(lineMap); i++ {
-		newContent += lineMap[i] + "\n"
+	for i := 0; i < len(linesMap); i++ {
+		if i == len(linesMap)-1 {
+			newContent += linesMap[i]
+		} else {
+			newContent += linesMap[i] + "\n"
+		}
 	}
 
 	return []byte(newContent), nil
 }
 
-func walkGetStartStopSequences(n *compare.Node, sequences []*startStop) []*startStop {
+func walkGetStartStopSequences(n *compare.Node, sequences []startStop) []startStop {
 	// work against n's NodeContent
 	end := len(n.NodeContent) - 1
 	for index, node := range n.NodeContent {
@@ -97,12 +91,20 @@ func walkGetStartStopSequences(n *compare.Node, sequences []*startStop) []*start
 		if node.Kind != yaml.SequenceNode {
 			continue
 		}
+
 		// don't manage indentation for FlowStyle (inline)
 		if node.Style == yaml.FlowStyle {
 			continue
 		}
 
-		ss := startStop{start: node.Line - 1}
+		// check if the first child node has HeadComment, subtract it's line count from start
+		//   note: we don't need to check for FootComment, since we don't stop until next yaml node or EOF
+		numHeadCommentLines := 0
+		if len(node.NodeContent) > 0 && node.NodeContent[0].HeadComment != "" {
+			numHeadCommentLines = len(strings.Split(node.NodeContent[0].HeadComment, "\n"))
+		}
+
+		ss := startStop{start: node.Line - 1 - numHeadCommentLines}
 		switch {
 		case len(n.NodeContent) == 1:
 			// if the NodeContent length is only 1, then end is same as start
@@ -122,7 +124,7 @@ func walkGetStartStopSequences(n *compare.Node, sequences []*startStop) []*start
 				ss.goesToEnd = true
 			}
 		}
-		sequences = append(sequences, &ss)
+		sequences = append(sequences, ss)
 	}
 
 	return sequences

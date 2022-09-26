@@ -262,14 +262,162 @@ spec:
   - rewq
 `,
 		},
+		{
+			note:     "lists with comments",
+			reduceBy: 2,
+			yaml: `images:
+  ## category comment 1
+  # - name: my-image
+  #   newTag: dev
+
+  ## category comment 2
+  # - name: my-other-image
+  #   newTag: 1.2.3
+  - name: my-other-image
+    newTag: dev
+  # - name: fdsa
+  #   newTag: dev
+  - name: meh
+    newName: my-new-image
+    newTag: asdf
+
+scalarList:
+  # this comment reqw
+  - asdf
+  - fdsa
+  - qewr
+  # - jktr
+  # - jkwe
+  - yuio
+`,
+			expected: `images:
+## category comment 1
+# - name: my-image
+#   newTag: dev
+
+## category comment 2
+# - name: my-other-image
+#   newTag: 1.2.3
+- name: my-other-image
+  newTag: dev
+# - name: fdsa
+#   newTag: dev
+- name: meh
+  newName: my-new-image
+  newTag: asdf
+
+scalarList:
+# this comment reqw
+- asdf
+- fdsa
+- qewr
+# - jktr
+# - jkwe
+- yuio
+`,
+		},
+		{
+			note:     "head comments on lists 2. they can have empty blank lines in the middle",
+			reduceBy: 2,
+			yaml: `---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+  - service.yaml
+  # - ../other-base  # a commented out comment
+  # - ../third-base
+
+images:
+  # - name: my-image
+  #   newTag: my-tag
+
+  ## category comment
+  # - name: my-other-image
+  #   newTag: my-tag
+  - name: my-other-image
+    newTag: dev`,
+			expected: `---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../base
+- service.yaml
+# - ../other-base  # a commented out comment
+# - ../third-base
+
+images:
+# - name: my-image
+#   newTag: my-tag
+
+## category comment
+# - name: my-other-image
+#   newTag: my-tag
+- name: my-other-image
+  newTag: dev`,
+		},
+		{
+			note:     "foot comments on lists. they can have empty blank lines in the middle",
+			reduceBy: 2,
+			yaml: `---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+  - service.yaml
+    # - ../other-base  # a commented out comment
+    # - ../third-base
+
+images:
+  - name: my-other-image
+    newTag: dev
+    # - name: my-image
+    #   newTag: my-tag
+
+    ## category comment
+    # - name: my-other-image
+    #   newTag: my-tag
+
+  - name: my--image
+    #   newTag: my-tag
+asdf:
+  fdsa: qwer`,
+			expected: `---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../base
+- service.yaml
+  # - ../other-base  # a commented out comment
+  # - ../third-base
+
+images:
+- name: my-other-image
+  newTag: dev
+  # - name: my-image
+  #   newTag: my-tag
+
+  ## category comment
+  # - name: my-other-image
+  #   newTag: my-tag
+
+- name: my--image
+  #   newTag: my-tag
+asdf:
+  fdsa: qwer`,
+		},
 	}
 	for _, tc := range testCases {
 		got, err := FixLists([]byte(tc.yaml), tc.reduceBy)
 		if err != nil {
-			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
+			t.Errorf("Description: %s: indentation.FixLists(...): \n-expected:\n%#v\n+got:\n%#v\n", tc.note, nil, err)
 		}
 		if string(got) != tc.expected {
-			t.Errorf("Description: %s: main.FixLists(...): \n-expected:\n%s\n+got:\n%s\n", tc.note, tc.expected, string(got))
+			t.Errorf("Description: %s: indentation.FixLists(...): \n-expected:\n'%s'\n+got:\n'%s'\n", tc.note, tc.expected, string(got))
 		}
 	}
 }
