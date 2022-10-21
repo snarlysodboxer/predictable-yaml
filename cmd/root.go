@@ -160,7 +160,7 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 	return cfgNodesByPaths
 }
 
-// configsNodeForPath returns a proper set of config nodes for a particular file path.
+// configNodesForPath returns a proper set of config nodes for a particular file path.
 // matches from shortest path to longest path, overriding
 //   configs from shorter paths with configs from longer paths.
 // expects sorted []configNodesByPath.
@@ -243,7 +243,6 @@ func getConfigDirsFromFilePaths(workDir, homeDir string, filePaths []string) []s
 
 func getFilePathParentDirs(workDir, homeDir, filePath string, dirs map[string]bool) map[string]bool {
 	parent := filepath.Dir(filePath)
-	// if parent == "." || parent == "/" || parent == homeDir || parent == workDir {
 	if parent == "." || parent == "/" || parent == homeDir || parent == workDir {
 		return dirs
 	}

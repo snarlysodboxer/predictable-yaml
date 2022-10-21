@@ -78,14 +78,13 @@ var fixCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, filePaths)
-
-		success := true
-
 		allFilePaths, err := getAllFilePaths(filePaths)
 		if err != nil {
 			log.Fatal(err)
 		}
+		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths)
+
+		success := true
 
 		for _, filePath := range allFilePaths {
 			fNode := &yaml.Node{}

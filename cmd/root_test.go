@@ -106,11 +106,12 @@ TestCases:
 	for _, tc := range testCases {
 		// setup
 		tmpDir := t.TempDir()
-		filePaths, _, err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles, tc.filePaths, []string{})
+		err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles)
 		if err != nil {
 			t.Errorf("Description: %s: cmd.getConfigNodesByPath(...): \n-expected:\n%#v\n+got:\n%s\n", tc.note, nil, err.Error())
 			continue
 		}
+		filePaths := fmtPaths(tmpDir, tc.filePaths)
 		expectedConfigNodesByPath := []configNodesByPath{}
 		for setPath, loadPath := range tc.expectedConfigNodesPaths {
 			if setPath != "" {
@@ -198,11 +199,12 @@ func TestWalkFindParentConfigDirs(t *testing.T) {
 	for _, tc := range testCases {
 		// setup
 		tmpDir := t.TempDir()
-		_, expectedConfigDirs, err := setupFileSystem(tmpDir, tc.mkdirs, map[string][]byte{}, []string{}, tc.expectedConfigDirs)
+		err := setupFileSystem(tmpDir, tc.mkdirs, map[string][]byte{})
 		if err != nil {
 			t.Errorf("Description: %s: cmd.walkFindParentConfigDirs(...): \n-expected:\n%#v\n+got:\n%s\n", tc.note, nil, err.Error())
 			continue
 		}
+		expectedConfigDirs := fmtPaths(tmpDir, tc.expectedConfigDirs)
 
 		// do it
 		got, err := walkFindParentConfigDirs(fmtPath(tmpDir, tc.workDir), tmpDir, []string{})
@@ -222,7 +224,7 @@ func TestGetConfigDirsFromFilePaths(t *testing.T) {
 		mkdirs             []string
 		mkfiles            map[string][]byte
 		workDir            string
-		filePaths          []string
+		filePaths          []string // always full file paths, not dirs
 		expectedConfigDirs []string
 	}
 
@@ -260,11 +262,13 @@ asdf: fdsa  # predictable-yaml: ignore-required
 	for _, tc := range testCases {
 		// setup
 		tmpDir := t.TempDir()
-		filePaths, expectedConfigDirs, err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles, tc.filePaths, tc.expectedConfigDirs)
+		err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles)
 		if err != nil {
 			t.Errorf("Description: %s: cmd.getConfigDirsFromFilePaths(...): \n-expected:\n%#v\n+got:\n%s\n", tc.note, nil, err.Error())
 			continue
 		}
+		filePaths := fmtPaths(tmpDir, tc.filePaths)
+		expectedConfigDirs := fmtPaths(tmpDir, tc.expectedConfigDirs)
 
 		// do it
 		got := getConfigDirsFromFilePaths(fmtPath(tmpDir, tc.workDir), tmpDir, filePaths)
@@ -367,11 +371,13 @@ func TestGetAllFilePaths(t *testing.T) {
 	for _, tc := range testCases {
 		// setup
 		tmpDir := t.TempDir()
-		filePaths, expectedFilePaths, err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles, tc.filePaths, tc.expectedFilePaths)
+		err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles)
 		if err != nil {
 			t.Errorf("Description: %s: cmd.getAllFilePaths(...): \n-expected:\n%#v\n+got:\n%s\n", tc.note, nil, err.Error())
 			continue
 		}
+		filePaths := fmtPaths(tmpDir, tc.filePaths)
+		expectedFilePaths := fmtPaths(tmpDir, tc.expectedFilePaths)
 
 		// do it
 		got, err := getAllFilePaths(filePaths)
@@ -385,15 +391,12 @@ func TestGetAllFilePaths(t *testing.T) {
 	}
 }
 
-func setupFileSystem(tmpDir string, mkdirs []string, mkfiles map[string][]byte, filePaths, expectedFilePaths []string) ([]string, []string, error) {
-	fPaths := []string{}
-	efPaths := []string{}
+func setupFileSystem(tmpDir string, mkdirs []string, mkfiles map[string][]byte) error {
 	// make dirs
 	for _, path := range mkdirs {
 		err := os.MkdirAll(fmtPath(tmpDir, path), 0755)
 		if err != nil {
-			// return fPaths, err.(*os.PathError).Err
-			return fPaths, efPaths, err
+			return err
 		}
 	}
 
@@ -401,21 +404,20 @@ func setupFileSystem(tmpDir string, mkdirs []string, mkfiles map[string][]byte, 
 	for path, contents := range mkfiles {
 		err := os.WriteFile(fmtPath(tmpDir, path), contents, 0644)
 		if err != nil {
-			return fPaths, efPaths, err
+			return err
 		}
 	}
 
-	// fmt filePaths
-	for _, path := range filePaths {
+	return nil
+}
+
+func fmtPaths(tmpDir string, paths []string) []string {
+	fPaths := []string{}
+	for _, path := range paths {
 		fPaths = append(fPaths, fmtPath(tmpDir, path))
 	}
 
-	// fmt expectedFilePaths
-	for _, path := range expectedFilePaths {
-		efPaths = append(efPaths, fmtPath(tmpDir, path))
-	}
-
-	return fPaths, efPaths, nil
+	return fPaths
 }
 
 func fmtPath(tmpDir, path string) string {

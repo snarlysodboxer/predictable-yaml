@@ -58,12 +58,11 @@ var lintCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, filePaths)
-
 		allFilePaths, err := getAllFilePaths(filePaths)
 		if err != nil {
 			log.Fatal(err)
 		}
+		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths)
 
 		success := true
 		for _, filePath := range allFilePaths {
