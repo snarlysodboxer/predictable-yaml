@@ -65,8 +65,20 @@ var fixCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, filePaths []string) {
-		// read files in configDir, populate configMap
-		configMap := getConfigMap()
+		// setup
+		configDirFlag := ""
+		if cfgDir != "" {
+			configDirFlag = cfgDir
+		}
+		workDir, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, filePaths)
 
 		success := true
 
@@ -76,7 +88,6 @@ var fixCmd = &cobra.Command{
 		}
 
 		for _, filePath := range allFilePaths {
-			// setup
 			fNode := &yaml.Node{}
 			existingFileContents, err := getYAML(fNode, filePath)
 			if err != nil {
@@ -92,7 +103,9 @@ var fixCmd = &cobra.Command{
 				log.Printf("WARNING: unable to determine a schema for target file: %s", filePath)
 				continue
 			}
-			configNode, ok := configMap[fileConfigs.Kind]
+
+			configNodes := configNodesForPath(cfgNodesByPaths, filePath)
+			configNode, ok := configNodes[fileConfigs.Kind]
 			if !ok {
 				log.Printf("WARNING: no config found for schema '%s' in file: %s", fileConfigs.Kind, filePath)
 				continue
@@ -100,7 +113,7 @@ var fixCmd = &cobra.Command{
 
 			// do it
 			sortConfigs := compare.SortConfigs{
-				ConfigMap:            configMap,
+				ConfigNodes:          configNodes,
 				FileConfigs:          fileConfigs,
 				UnmatchedToBeginning: unmatchedToBeginning,
 				AddPreferreds:        addPreferreds,

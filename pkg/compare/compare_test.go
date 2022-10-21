@@ -1129,7 +1129,7 @@ spec:
 
 	for _, tc := range testCases {
 		// convert yaml
-		configMap := ConfigMap{}
+		configNodes := ConfigNodes{}
 		for _, cYaml := range tc.configYamls {
 			cN := &yaml.Node{}
 			err := yaml.Unmarshal([]byte(cYaml), cN)
@@ -1144,7 +1144,7 @@ spec:
 			if fileConfigs.Kind == "" {
 				t.Errorf("Description: %s: compare.WalkAndCompare(...): failed getting kind for config test data!", tc.note)
 			}
-			configMap[fileConfigs.Kind] = configNode
+			configNodes[fileConfigs.Kind] = configNode
 		}
 
 		fN := &yaml.Node{}
@@ -1162,10 +1162,10 @@ spec:
 
 		// do it
 		sortConfigs := SortConfigs{
-			ConfigMap:   configMap,
+			ConfigNodes: configNodes,
 			FileConfigs: fileConfigs,
 		}
-		gotErrs := WalkAndCompare(configMap[fileConfigs.Kind], fileNode, sortConfigs, ValidationErrors{})
+		gotErrs := WalkAndCompare(configNodes[fileConfigs.Kind], fileNode, sortConfigs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		if got != expected {
@@ -1652,7 +1652,7 @@ spec:
 
 	for _, tc := range testCases {
 		// convert yaml
-		configMap := ConfigMap{}
+		configNodes := ConfigNodes{}
 		for _, cYaml := range tc.configYamls {
 			cN := &yaml.Node{}
 			err := yaml.Unmarshal([]byte(cYaml), cN)
@@ -1668,7 +1668,7 @@ spec:
 				t.Fatalf("Description: %s: compare.WalkAndSort(...): failed getting kind for config test data!", tc.note)
 				continue
 			}
-			configMap[fileConfigs.Kind] = configNode
+			configNodes[fileConfigs.Kind] = configNode
 		}
 
 		fN := &yaml.Node{}
@@ -1685,8 +1685,8 @@ spec:
 		}
 
 		// do it
-		sortConfs := SortConfigs{configMap, fileConfigs, tc.toBeginning, tc.addPreferreds}
-		gotErrs := WalkAndSort(configMap[fileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
+		sortConfs := SortConfigs{configNodes, fileConfigs, tc.toBeginning, tc.addPreferreds}
+		gotErrs := WalkAndSort(configNodes[fileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)
 		switch {

@@ -36,8 +36,8 @@ type Node struct {
 	Ditto       string
 }
 
-// ConfigMap is a map of names to Config Nodes
-type ConfigMap map[string]*Node
+// ConfigNodes is a map of names to Config Nodes
+type ConfigNodes map[string]*Node
 
 // ValidationErrors allows us to return multiple validation errors
 type ValidationErrors []error
@@ -51,7 +51,7 @@ type FileConfigs struct {
 
 // SortConfigs represent various configs for a sorting operation
 type SortConfigs struct {
-	ConfigMap            ConfigMap
+	ConfigNodes          ConfigNodes
 	FileConfigs          FileConfigs
 	UnmatchedToBeginning bool
 	AddPreferreds        bool
@@ -426,7 +426,7 @@ func getConfigValueNodeForDitto(configPair KeyValuePair, sortConfs SortConfigs) 
 		dittoKind := strings.Split(configPair.KeyNode.Ditto, `.`)[0]
 		dittoPath = fmt.Sprintf(".%s", strings.Join(strings.Split(configPair.KeyNode.Ditto, `.`)[1:], `.`))
 		ok := false
-		rootNode, ok = sortConfs.ConfigMap[dittoKind]
+		rootNode, ok = sortConfs.ConfigNodes[dittoKind]
 		if !ok {
 			filePath := GetReferencePath(configPair.KeyNode, 0, "")
 			err := fmt.Errorf("configuration error: no config found for schema '%s' specified at path: %s", dittoKind, filePath)
