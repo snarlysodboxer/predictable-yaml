@@ -64,32 +64,39 @@ type KeyValuePair struct {
 	ValueNode *Node
 }
 
+var (
+	startDot    = regexp.MustCompile(`^\.`)
+	endsWithDot = regexp.MustCompile(`.*\.$`)
+)
+
 // GetFileConfigs parses comments for config info
 func GetFileConfigs(node *Node) FileConfigs {
 	fileConfigs := FileConfigs{}
 	// check config comments
-	for _, n := range node.NodeContent[0].NodeContent {
-		for _, comment := range []string{n.HeadComment, n.LineComment, n.FootComment} {
-			if comment == "" {
-				continue
-			}
-			commentLines := strings.Split(comment, "\n")
-			for _, commentLine := range commentLines {
-				if !strings.Contains(commentLine, "predictable-yaml:") {
+	if len(node.NodeContent) != 0 {
+		for _, n := range node.NodeContent[0].NodeContent {
+			for _, comment := range []string{n.HeadComment, n.LineComment, n.FootComment} {
+				if comment == "" {
 					continue
 				}
-				commentLine = strings.ReplaceAll(commentLine, "#", "")
-				commentLine = strings.ReplaceAll(commentLine, " ", "")
-				commentLine = strings.Split(commentLine, ":")[1]
-				splitStrings := strings.Split(commentLine, ",")
-				for _, str := range splitStrings {
-					switch {
-					case str == "ignore":
-						fileConfigs.Ignore = true
-					case str == "ignore-requireds":
-						fileConfigs.IgnoreRequireds = true
-					case strings.Contains(str, "kind"):
-						fileConfigs.Kind = strings.Split(str, "=")[1]
+				commentLines := strings.Split(comment, "\n")
+				for _, commentLine := range commentLines {
+					if !strings.Contains(commentLine, "predictable-yaml:") {
+						continue
+					}
+					commentLine = strings.ReplaceAll(commentLine, "#", "")
+					commentLine = strings.ReplaceAll(commentLine, " ", "")
+					commentLine = strings.Split(commentLine, ":")[1]
+					splitStrings := strings.Split(commentLine, ",")
+					for _, str := range splitStrings {
+						switch {
+						case str == "ignore":
+							fileConfigs.Ignore = true
+						case str == "ignore-requireds":
+							fileConfigs.IgnoreRequireds = true
+						case strings.Contains(str, "kind"):
+							fileConfigs.Kind = strings.Split(str, "=")[1]
+						}
 					}
 				}
 			}
@@ -98,16 +105,18 @@ func GetFileConfigs(node *Node) FileConfigs {
 
 	// check Kubernetes-esq Kind
 	if fileConfigs.Kind == "" {
-		for index, n := range node.NodeContent[0].NodeContent {
-			if n.Value == "kind" {
-				if index+1 <= (len(node.NodeContent[0].NodeContent) - 1) {
-					valueNode := node.NodeContent[0].NodeContent[index+1]
-					if valueNode.Line != n.Line {
-						continue
+		if len(node.NodeContent) != 0 {
+			for index, n := range node.NodeContent[0].NodeContent {
+				if n.Value == "kind" {
+					if index+1 <= (len(node.NodeContent[0].NodeContent) - 1) {
+						valueNode := node.NodeContent[0].NodeContent[index+1]
+						if valueNode.Line != n.Line {
+							continue
+						}
+						fileConfigs.Kind = valueNode.Value
 					}
-					fileConfigs.Kind = valueNode.Value
+					break
 				}
-				break
 			}
 		}
 	}
@@ -160,13 +169,13 @@ func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs Vali
 	switch configNode.Kind {
 	case yaml.DocumentNode:
 		if fileNode.Kind != yaml.DocumentNode {
-			return append(errs, fmt.Errorf("program error: expected Document: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected '%s' to be a Document:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
 		}
 
 		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
 	case yaml.MappingNode:
 		if fileNode.Kind != yaml.MappingNode {
-			return append(errs, fmt.Errorf("program error: expected Map: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected '%s' to be a Map:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
 		}
 
 		// do the checks
@@ -189,7 +198,6 @@ func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs Vali
 						errs = append(errs, err)
 						break
 					}
-					endsWithDot := regexp.MustCompile(`.*\.$`)
 					switch {
 					case endsWithDot.Match([]byte(configPair.KeyNode.Ditto)) && filePair.ValueNode.Kind == yaml.SequenceNode && cN.Kind == yaml.MappingNode:
 						wrappedInSequence := &Node{
@@ -209,7 +217,7 @@ func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs Vali
 		}
 	case yaml.SequenceNode:
 		if fileNode.Kind != yaml.SequenceNode {
-			return append(errs, fmt.Errorf("program error: expected Sequence: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected '%s' to be a Sequence:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
 		}
 		for _, fNode := range fileNode.NodeContent {
 			// use the same configNode for each entry in the sequence
@@ -219,7 +227,7 @@ func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs Vali
 		}
 	case yaml.ScalarNode:
 		if fileNode.Kind != yaml.ScalarNode {
-			return append(errs, fmt.Errorf("program error: expected Scalar: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected '%s' to be a Scalar:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
 		}
 	default:
 		return append(errs, fmt.Errorf("did not expect configNode.Kind of: %v", fileNode.Kind))
@@ -264,7 +272,6 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 					}
 					// TODO this way of handling mismatched kinds feels clumsy,
 					//   here and in WalkAndCompare.
-					endsWithDot := regexp.MustCompile(`.*\.$`)
 					switch {
 					case endsWithDot.Match([]byte(configPair.KeyNode.Ditto)) && filePair.ValueNode.Kind == yaml.SequenceNode && cN.Kind == yaml.MappingNode:
 						wrappedInSequence := &Node{
@@ -415,7 +422,6 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 }
 
 func getConfigValueNodeForDitto(configPair KeyValuePair, sortConfs SortConfigs) (*Node, error) {
-	startDot := regexp.MustCompile(`^\.`)
 	rootNode := &Node{}
 	dittoPath := configPair.KeyNode.Ditto
 	if startDot.MatchString(configPair.KeyNode.Ditto) {
@@ -440,7 +446,6 @@ func getConfigValueNodeForDitto(configPair KeyValuePair, sortConfs SortConfigs) 
 	}
 
 	// handle paths ending in dot
-	endsWithDot := regexp.MustCompile(`.*\.$`)
 	if cN.Kind != yaml.ScalarNode && endsWithDot.Match([]byte(dittoPath)) {
 		return cN, nil
 	}
@@ -682,4 +687,19 @@ func GetValidationErrorStrings(errs ValidationErrors) string {
 	}
 
 	return errorString
+}
+
+func convertKind(node *Node) string {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		return "Document"
+	case yaml.MappingNode:
+		return "Map"
+	case yaml.SequenceNode:
+		return "Sequence"
+	case yaml.ScalarNode:
+		return "Scalar"
+	default:
+		return "Unknown"
+	}
 }

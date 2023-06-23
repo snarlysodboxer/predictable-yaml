@@ -81,7 +81,10 @@ OR just clone the repo and `go install`.
     * Config type can be configured with the comment `# predictable-yaml: kind=my-schema`, but if this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value. If neither are found, an error will be thrown.
     * Target file type will be determined in the same way, however if a matching config is not found, a warning will be output.
 * If the `--config-dir` flag is specified, configs from only that directory will be loaded.
-* If the `--config-dir` flag is not specified, search up the directory tree looking for `.predictable-yaml` directories, loading configs for any schema types it does not already know about.
+* If the `--config-dir` flag is not specified:
+    * Search up the directory tree looking for `.predictable-yaml` directories in parent directories, loading configs for any schema types it does not already know about.
+    * Search down the directory tree looking for `.predictable-yaml` directories in sub directories matching the given file paths, overriding configs for any files whose path match.
+        * For example, when running `predictable-yaml lint my-dir`, any configs found in `my-dir/my-subdir/.predictable-yaml` will override any found in parent dirs, for the `my-dir/my-subdir/deployment.yaml` file, but not for the `my-dir/other/deployment.yaml` file.
 * Config files must:
     * Not have comments other than the configuration ones specific to this program.
     * Not have more than one entry in each sequence.
