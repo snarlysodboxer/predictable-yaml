@@ -16,6 +16,13 @@
           src = ./.;
           vendorHash = "sha256-BqMayrlLSgOx4tuAl2vyQnUjLm7WizfMxdNc/ku+KGk=";
           env.CGO_ENABLED = "0";
+          nativeBuildInputs = [ pkgs.installShellFiles ];
+          postInstall = ''
+            installShellCompletion --cmd predictable-yaml \
+              --bash <($out/bin/predictable-yaml completion bash) \
+              --zsh <($out/bin/predictable-yaml completion zsh) \
+              --fish <($out/bin/predictable-yaml completion fish)
+          '';
           meta = with pkgs.lib; {
             description = "Lint and fix YAML key ordering";
             homepage = "https://github.com/snarlysodboxer/predictable-yaml";
