@@ -28,6 +28,27 @@ _Experimental features attempt to make less of a diff after reordering. We welco
 
 
 ## Install
+
+### Nix Flake
+```shell
+# Run from local checkout
+nix run .#predictable-yaml -- lint --help
+
+# Run from GitHub
+nix run github:snarlysodboxer/predictable-yaml -- lint --help
+
+# Install to profile
+nix profile install github:snarlysodboxer/predictable-yaml
+
+# Development shell (includes Go, gopls, delve)
+nix develop
+
+# Build locally
+nix build
+./result/bin/predictable-yaml --help
+```
+
+### Binary Release
 Download the [latest release](https://github.com/snarlysodboxer/predictable-yaml/releases/latest) for your system and then move it in place.
 ```shell
 mv ~/Downloads/predictable-yaml-darwin-amd64 /usr/local/bin/predictable-yaml
@@ -35,7 +56,9 @@ chmod ug+x /usr/local/bin/predictable-yaml
 # on MacOS
 sudo xattr -r -d com.apple.quarantine /usr/local/bin/predictable-yaml
 ```
-OR just clone the repo and `go install`.
+
+### From Source
+Clone the repo and `go install`.
 
 ## Usage
 * `go run main.go --help` OR
