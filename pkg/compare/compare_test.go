@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -638,6 +638,97 @@ spec:
 	}
 }
 
+func TestWalkAndValidateConfig(t *testing.T) {
+	type testCase struct {
+		note        string
+		configYaml  string
+		expectError bool
+		errorMsg    string
+	}
+
+	testCases := []testCase{
+		{
+			note: "valid config with single first directive",
+			configYaml: `---
+apiVersion: admissionregistration.k8s.io/v1  # first, required
+kind: MutatingWebhookConfiguration  # required
+metadata:  # required
+  name: TODO  # first, required
+webhooks:  # required
+- name: TODO  # first, required`,
+			expectError: false,
+		},
+		{
+			note: "multiple first directives in same root map should error",
+			configYaml: `---
+apiVersion: admissionregistration.k8s.io/v1  # first, required
+kind: MutatingWebhookConfiguration  # required
+metadata:  # required
+  name: TODO  # first, required
+webhooks:  # first, required
+- name: TODO  # first, required`,
+			expectError: true,
+			errorMsg:    "configuration error: multiple keys marked as 'first' in the same map at path '', keys: 'apiVersion', 'webhooks'",
+		},
+		{
+			note: "multiple first directives in nested map should error",
+			configYaml: `---
+kind: Deployment  # first
+spec:  # required
+  template:  # required
+    metadata:
+      name: TODO  # first
+      namespace: TODO  # first
+    spec:  # required
+      containers:
+      - name: TODO  # first, required`,
+			expectError: true,
+			errorMsg:    "configuration error: multiple keys marked as 'first' in the same map at path '.spec.template.metadata', keys: 'name', 'namespace'",
+		},
+		{
+			note: "first directives in different maps should be valid",
+			configYaml: `---
+apiVersion: apps/v1  # first, required
+kind: Deployment  # required
+metadata:  # required
+  name: TODO  # first, required
+  namespace: TODO
+spec:  # required
+  replicas: 1  # first
+  template:  # required
+    spec:
+      containers:
+      - name: TODO  # first, required`,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		cN := &yaml.Node{}
+		err := yaml.Unmarshal([]byte(tc.configYaml), cN)
+		if err != nil {
+			t.Errorf("Description: %s: failed unmarshaling config test data: %v", tc.note, err)
+			continue
+		}
+		configNode := &Node{Node: cN}
+		WalkConvertYamlNodeToMainNode(configNode)
+		WalkParseLoadConfigComments(configNode)
+
+		err = WalkAndValidateConfig(configNode)
+		if tc.expectError {
+			if err == nil {
+				t.Errorf("Description: %s: expected error but got none", tc.note)
+			} else if err.Error() != tc.errorMsg {
+				t.Errorf("Description: %s: \n-expected:\n%s\n+got:\n%s", tc.note, tc.errorMsg, err.Error())
+			}
+		} else {
+			if err != nil {
+				t.Errorf("Description: %s: expected no error but got: %v", tc.note, err)
+			}
+		}
+	}
+}
+
 func TestWalkAndCompare(t *testing.T) {
 	type testCase struct {
 		note         string
@@ -1140,6 +1231,10 @@ spec:
 			configNode := &Node{Node: cN}
 			WalkConvertYamlNodeToMainNode(configNode)
 			WalkParseLoadConfigComments(configNode)
+			if err := WalkAndValidateConfig(configNode); err != nil {
+				t.Errorf("Description: %s: compare.WalkAndCompare(...): unexpected config validation error: %v", tc.note, err)
+				continue
+			}
 			fileConfigs := GetFileConfigs(configNode)
 			if fileConfigs.Kind == "" {
 				t.Errorf("Description: %s: compare.WalkAndCompare(...): failed getting kind for config test data!", tc.note)

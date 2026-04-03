@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -162,6 +162,45 @@ func WalkParseLoadConfigComments(node *Node) {
 	for _, innerNode := range node.NodeContent {
 		WalkParseLoadConfigComments(innerNode)
 	}
+}
+
+// WalkAndValidateConfig validates that the config file is correctly structured
+func WalkAndValidateConfig(node *Node) error {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.NodeContent) > 0 {
+			return WalkAndValidateConfig(node.NodeContent[0])
+		}
+	case yaml.MappingNode:
+		// Check for multiple 'first' directives in this map
+		pairs := GetKeyValuePairs(node.NodeContent)
+		firstKeys := []string{}
+		for _, pair := range pairs {
+			if pair.KeyNode.MustBeFirst {
+				firstKeys = append(firstKeys, pair.Key)
+			}
+		}
+		if len(firstKeys) > 1 {
+			filePath := GetReferencePath(node, 0, "")
+			keysStr := "'" + strings.Join(firstKeys, "', '") + "'"
+			return fmt.Errorf("configuration error: multiple keys marked as 'first' in the same map at path '%s', keys: %s", filePath, keysStr)
+		}
+
+		// Recursively validate child nodes
+		for _, pair := range pairs {
+			if err := WalkAndValidateConfig(pair.ValueNode); err != nil {
+				return err
+			}
+		}
+	case yaml.SequenceNode:
+		// Validate the first element (which is used as template for all elements)
+		if len(node.NodeContent) > 0 {
+			if err := WalkAndValidateConfig(node.NodeContent[0]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // WalkAndCompare walks the tree and does the validation

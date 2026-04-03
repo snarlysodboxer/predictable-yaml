@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -106,6 +106,9 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 			configNode := &compare.Node{Node: cNode}
 			compare.WalkConvertYamlNodeToMainNode(configNode)
 			compare.WalkParseLoadConfigComments(configNode)
+			if err := compare.WalkAndValidateConfig(configNode); err != nil {
+				log.Fatalf("error validating config file '%s': %v", path, err)
+			}
 			fileConfigs := compare.GetFileConfigs(configNode)
 			if fileConfigs.Kind == "" {
 				log.Fatalf("error determining schema for config file: %s: %v", path, err)
@@ -141,6 +144,9 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 			configNode := &compare.Node{Node: cNode}
 			compare.WalkConvertYamlNodeToMainNode(configNode)
 			compare.WalkParseLoadConfigComments(configNode)
+			if err := compare.WalkAndValidateConfig(configNode); err != nil {
+				log.Fatalf("error validating config file '%s': %v", path, err)
+			}
 			fileConfigs := compare.GetFileConfigs(configNode)
 			if fileConfigs.Kind == "" {
 				log.Fatalf("error determining schema for config file: %s: %v", path, err)
@@ -161,8 +167,8 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 }
 
 // configNodesForPath returns a proper set of config nodes for a particular file path.
-// matches from shortest path to longest path, overriding
-//   configs from shorter paths with configs from longer paths.
+// matches from shortest path to longest path, overriding configs from shorter paths with configs from longer paths.
+//
 // expects sorted []configNodesByPath.
 func configNodesForPath(cfgNodesByPaths []configNodesByPath, filePath string) compare.ConfigNodes {
 	configNodes := cfgNodesByPaths[0].ConfigNodes
@@ -192,8 +198,7 @@ func getYAML(node *yaml.Node, file string) ([]byte, error) {
 	return data, nil
 }
 
-// walkFindParentConfigDirs walks up the tree from dir (starting with working directory,)
-//   to homeDir or root, returning a list of discovered configDirs.
+// walkFindParentConfigDirs walks up the tree from dir (starting with working directory,) to homeDir or root, returning a list of discovered configDirs.
 func walkFindParentConfigDirs(dir, homeDir string, configDirs []string) ([]string, error) {
 	configDir := fmt.Sprintf("%s/%s", dir, configDirName)
 	_, err := os.Stat(configDir)
