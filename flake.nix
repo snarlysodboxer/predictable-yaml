@@ -6,13 +6,19 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         predictable-yaml = pkgs.buildGoModule {
           pname = "predictable-yaml";
-          version = "0.1.0";
+          version = "0.1.11";
           src = ./.;
           vendorHash = "sha256-BqMayrlLSgOx4tuAl2vyQnUjLm7WizfMxdNc/ku+KGk=";
           env.CGO_ENABLED = "0";
@@ -45,7 +51,8 @@
           ];
         };
       }
-    ) // {
+    )
+    // {
       overlays.default = final: prev: {
         predictable-yaml = self.packages.${prev.system}.predictable-yaml;
       };
