@@ -14,4 +14,15 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+.direnv
+
 result
+predictable-yaml-darwin-amd64
+predictable-yaml-darwin-arm64
+predictable-yaml-linux-amd64
+predictable-yaml-linux-arm64
+predictable-yaml-windows-amd64.exe
+
+# Embedded default configs fetched at build time via go generate
+internal/embedded/configs/*.yaml
+internal/embedded/configs/*.yml

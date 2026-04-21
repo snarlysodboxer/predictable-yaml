@@ -16,13 +16,24 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        predictable-yaml-configs = pkgs.fetchFromGitHub {
+          owner = "snarlysodboxer";
+          repo = "predictable-yaml-configs";
+          rev = "v1.0.0";
+          hash = "sha256-UjsXLWQ7/CL1Aj8yUhotQhhFmXiXa3TBmXED3qlcLX4=";
+        };
         predictable-yaml = pkgs.buildGoModule {
           pname = "predictable-yaml";
-          version = "0.1.11";
+          version = "v0.2.0";
           src = ./.;
           vendorHash = "sha256-BqMayrlLSgOx4tuAl2vyQnUjLm7WizfMxdNc/ku+KGk=";
           env.CGO_ENABLED = "0";
+          ldflags = [ "-X github.com/snarlysodboxer/predictable-yaml/cmd.Version=${predictable-yaml.version}" ];
           nativeBuildInputs = [ pkgs.installShellFiles ];
+          preBuild = ''
+            cp ${predictable-yaml-configs}/*.yaml internal/embedded/configs/ || true
+            cp ${predictable-yaml-configs}/*.yml internal/embedded/configs/ || true
+          '';
           postInstall = ''
             installShellCompletion --cmd predictable-yaml \
               --bash <($out/bin/predictable-yaml completion bash) \
