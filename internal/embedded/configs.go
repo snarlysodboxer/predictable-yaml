@@ -20,7 +20,7 @@ import (
 	"io/fs"
 )
 
-//go:generate bash -c "../../hack/fetch-default-configs.sh"
+//go:generate bash -c "cd ../.. && hack/fetch-default-configs.sh"
 
 //go:embed configs/*
 var configFS embed.FS

@@ -371,6 +371,7 @@ func isGitignored(gitRoot, relPath string) bool {
 		}
 		// Normalize the gitignore pattern
 		pattern := filepath.ToSlash(line)
+		pattern = strings.TrimPrefix(pattern, "/")
 		pattern = strings.TrimSuffix(pattern, "/")
 		checkPath := strings.TrimSuffix(relPath, "/")
 

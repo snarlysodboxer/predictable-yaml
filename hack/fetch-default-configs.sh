@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fetches the latest tagged release of default configs from the predictable-yaml-configs repo.
-# Used by go generate to populate internal/embedded/configs/ before build.
+# Fetches configs from the predictable-yaml-configs repo into internal/embedded/configs/.
+# Run from the repo root.
 
 CONFIGS_REPO="${CONFIGS_REPO:-https://github.com/snarlysodboxer/predictable-yaml-configs}"
 CONFIGS_TAG="${CONFIGS_TAG:-latest}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEST_DIR="${SCRIPT_DIR}/../internal/embedded/configs"
-
-mkdir -p "${DEST_DIR}"
+mkdir -p internal/embedded/configs
 
 # If CONFIGS_TAG is "latest", resolve it to the most recent tag
 if [ "${CONFIGS_TAG}" = "latest" ]; then
-    # Extract owner/repo from URL
     REPO_PATH=$(echo "${CONFIGS_REPO}" | sed 's|.*github.com/||' | sed 's|\.git$||')
     API_URL="https://api.github.com/repos/${REPO_PATH}/tags?per_page=1"
     echo "Resolving latest tag from ${API_URL}..."
@@ -62,11 +58,11 @@ if [ -z "${EXTRACTED_DIR}" ]; then
 fi
 
 # Copy only YAML files to the destination
-rm -f "${DEST_DIR}"/*.yaml "${DEST_DIR}"/*.yml
+rm -f internal/embedded/configs/*.yaml internal/embedded/configs/*.yml
 found_files=false
 for f in "${EXTRACTED_DIR}"/*.yaml "${EXTRACTED_DIR}"/*.yml; do
     if [ -f "$f" ]; then
-        cp "$f" "${DEST_DIR}/"
+        cp "$f" internal/embedded/configs
         found_files=true
     fi
 done
