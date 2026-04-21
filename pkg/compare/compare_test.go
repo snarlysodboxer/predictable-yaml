@@ -1780,7 +1780,7 @@ spec:
 		}
 
 		// do it
-		sortConfs := SortConfigs{configNodes, fileConfigs, tc.toBeginning, tc.addPreferreds}
+		sortConfs := SortConfigs{configNodes, fileConfigs, tc.toBeginning, tc.addPreferreds, nil}
 		gotErrs := WalkAndSort(configNodes[fileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
 		expected := GetValidationErrorStrings(tc.expectedErrs)
 		got := GetValidationErrorStrings(gotErrs)

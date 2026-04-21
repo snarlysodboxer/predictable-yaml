@@ -55,6 +55,7 @@ type SortConfigs struct {
 	FileConfigs          FileConfigs
 	UnmatchedToBeginning bool
 	AddPreferreds        bool
+	AddedFields          *[]string
 }
 
 // KeyValuePair represent a scalar key node, and it's related value node
@@ -425,6 +426,12 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 			}
 
 			newNodeContent = append(newNodeContent, newKeyNode, newValueNode)
+
+			// track added fields
+			if sortConfs.AddedFields != nil {
+				path := GetReferencePath(fileNode, 0, "") + "." + configPair.Key
+				*sortConfs.AddedFields = append(*sortConfs.AddedFields, path)
+			}
 
 			// set the style to match the parent. this prevents
 			//   inline representations in many cases.

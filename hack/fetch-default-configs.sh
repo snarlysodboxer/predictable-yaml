@@ -12,13 +12,21 @@ DEST_DIR="${SCRIPT_DIR}/../internal/embedded/configs"
 
 mkdir -p "${DEST_DIR}"
 
-# If CONFIGS_TAG is "latest", resolve it to the actual latest tag
+# If CONFIGS_TAG is "latest", resolve it to the most recent tag
 if [ "${CONFIGS_TAG}" = "latest" ]; then
     # Extract owner/repo from URL
     REPO_PATH=$(echo "${CONFIGS_REPO}" | sed 's|.*github.com/||' | sed 's|\.git$||')
-    CONFIGS_TAG=$(curl -sL "https://api.github.com/repos/${REPO_PATH}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')
+    API_URL="https://api.github.com/repos/${REPO_PATH}/tags?per_page=1"
+    echo "Resolving latest tag from ${API_URL}..."
+    API_RESPONSE=$(curl -sL "${API_URL}")
+    CONFIGS_TAG=$(echo "${API_RESPONSE}" | grep '"name"' | head -1 | sed 's/.*"name": *"//;s/".*//' || true)
     if [ -z "${CONFIGS_TAG}" ]; then
         echo "ERROR: Could not determine latest tag from ${CONFIGS_REPO}." >&2
+        echo "  API URL: ${API_URL}" >&2
+        echo "  Response: ${API_RESPONSE}" >&2
+        echo "" >&2
+        echo "  Make sure the repo exists and has at least one tag." >&2
+        echo "  To use a specific tag instead, run: CONFIGS_TAG=v1.0.0 $0" >&2
         exit 1
     fi
 fi
@@ -29,8 +37,19 @@ TARBALL_URL="${CONFIGS_REPO}/archive/${CONFIGS_TAG}.tar.gz"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
-if ! curl -sL --fail "${TARBALL_URL}" | tar xz -C "${TMP_DIR}"; then
-    echo "ERROR: Could not fetch configs from ${TARBALL_URL}." >&2
+TARBALL_FILE="${TMP_DIR}/configs.tar.gz"
+HTTP_CODE=$(curl -sL -o "${TARBALL_FILE}" -w "%{http_code}" "${TARBALL_URL}")
+if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+    echo "ERROR: Failed to download tarball (HTTP ${HTTP_CODE})." >&2
+    echo "  URL: ${TARBALL_URL}" >&2
+    echo "" >&2
+    echo "  Make sure the repo exists and the tag '${CONFIGS_TAG}' is valid." >&2
+    exit 1
+fi
+
+if ! tar xz -C "${TMP_DIR}" -f "${TARBALL_FILE}"; then
+    echo "ERROR: Failed to extract tarball." >&2
+    echo "  URL: ${TARBALL_URL}" >&2
     exit 1
 fi
 
@@ -38,6 +57,7 @@ fi
 EXTRACTED_DIR=$(find "${TMP_DIR}" -mindepth 1 -maxdepth 1 -type d | head -1)
 if [ -z "${EXTRACTED_DIR}" ]; then
     echo "ERROR: Tarball extraction produced no directory." >&2
+    echo "  URL: ${TARBALL_URL}" >&2
     exit 1
 fi
 
@@ -52,7 +72,10 @@ for f in "${EXTRACTED_DIR}"/*.yaml "${EXTRACTED_DIR}"/*.yml; do
 done
 
 if [ "${found_files}" = false ]; then
-    echo "ERROR: No YAML files found in ${CONFIGS_REPO} at ${CONFIGS_TAG}." >&2
+    echo "ERROR: No YAML files found in tarball." >&2
+    echo "  Repo: ${CONFIGS_REPO}" >&2
+    echo "  Tag: ${CONFIGS_TAG}" >&2
+    echo "  Extracted dir contents: $(ls -la "${EXTRACTED_DIR}")" >&2
     exit 1
 fi
 

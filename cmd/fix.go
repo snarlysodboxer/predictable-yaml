@@ -111,11 +111,13 @@ var fixCmd = &cobra.Command{
 			}
 
 			// do it
+			addedFields := []string{}
 			sortConfigs := compare.SortConfigs{
 				ConfigNodes:          configNodes,
 				FileConfigs:          fileConfigs,
 				UnmatchedToBeginning: unmatchedToBeginning,
 				AddPreferreds:        addPreferreds,
+				AddedFields:          &addedFields,
 			}
 			// only sort if validation fails
 			if validate {
@@ -211,6 +213,9 @@ var fixCmd = &cobra.Command{
 					continue
 				}
 				log.Printf("File '%s' has been fixed!", filePath)
+				if len(addedFields) > 0 {
+					log.Printf("WARNING: added required fields to '%s': %s", filePath, strings.Join(addedFields, ", "))
+				}
 			}
 		}
 
