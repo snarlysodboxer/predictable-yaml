@@ -18,7 +18,6 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -74,7 +73,7 @@ type configNodesByPath struct {
 
 // getConfigNodesByPath reads files in configDirFlag or found config dir(s), populating []configNodesByPath
 func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []string) []configNodesByPath {
-	configDirs := []string{}
+	var configDirs []string
 	if configDirFlag != "" {
 		configDirs = []string{configDirFlag}
 	} else {
@@ -152,7 +151,7 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 // loadLocalConfigNodes reads local YAML config files from a .predictable-yaml directory.
 func loadLocalConfigNodes(dir string) compare.ConfigNodes {
 	configNodes := compare.ConfigNodes{}
-	configFiles, err := ioutil.ReadDir(dir)
+	configFiles, err := os.ReadDir(dir)
 	if err != nil {
 		log.Fatalf("error reading dir '%s': %v", dir, err)
 	}
@@ -212,7 +211,7 @@ func loadRemoteConfigNodes(configDir string) compare.ConfigNodes {
 	}
 
 	configNodes := compare.ConfigNodes{}
-	configFiles, err := ioutil.ReadDir(cachePath)
+	configFiles, err := os.ReadDir(cachePath)
 	if err != nil {
 		log.Fatalf("error reading cached config dir '%s': %v", cachePath, err)
 	}
