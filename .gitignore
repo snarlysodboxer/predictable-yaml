@@ -15,3 +15,7 @@
 # vendor/
 
 result
+
+# Embedded default configs fetched at build time via go generate
+internal/embedded/configs/*.yaml
+internal/embedded/configs/*.yml

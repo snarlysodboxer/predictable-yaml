@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -25,7 +26,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/snarlysodboxer/predictable-yaml/internal/embedded"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
+	"github.com/snarlysodboxer/predictable-yaml/pkg/remote"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -85,74 +88,54 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 	// regular configNodes
 	// override more root configs with more specific configs
 	configNodes := compare.ConfigNodes{}
+
+	// First, load remote configs from parent config dirs (as base layer)
+	hasRemoteConfig := false
 	for _, dir := range configDirs {
-		configFiles, err := ioutil.ReadDir(dir)
-		if err != nil {
-			log.Fatalf("error reading dir '%s': %v", dir, err)
+		remoteNodes := loadRemoteConfigNodes(dir)
+		if remoteNodes != nil {
+			hasRemoteConfig = true
+			for kind, node := range remoteNodes {
+				configNodes[kind] = node
+			}
 		}
-		for _, file := range configFiles {
-			if file.IsDir() {
-				continue
-			}
-			if !yamlFileRegex.MatchString(file.Name()) {
-				continue
-			}
-			cNode := &yaml.Node{}
-			path := fmt.Sprintf("%s/%s", dir, file.Name())
-			_, err := getYAML(cNode, path)
-			if err != nil {
-				log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
-			}
-			configNode := &compare.Node{Node: cNode}
-			compare.WalkConvertYamlNodeToMainNode(configNode)
-			compare.WalkParseLoadConfigComments(configNode)
-			if err := compare.WalkAndValidateConfig(configNode); err != nil {
-				log.Fatalf("error validating config file '%s': %v", path, err)
-			}
-			fileConfigs := compare.GetFileConfigs(configNode)
-			if fileConfigs.Kind == "" {
-				log.Fatalf("error determining schema for config file: %s: %v", path, err)
-			}
-			configNodes[fileConfigs.Kind] = configNode
+	}
+
+	// If no remote config and no local configs found, try embedded defaults
+	if !hasRemoteConfig && len(configDirs) == 0 {
+		embeddedNodes := loadEmbeddedConfigNodes()
+		for kind, node := range embeddedNodes {
+			configNodes[kind] = node
+		}
+	}
+
+	// Then, load local config files (override remote configs)
+	for _, dir := range configDirs {
+		localNodes := loadLocalConfigNodes(dir)
+		for kind, node := range localNodes {
+			configNodes[kind] = node
 		}
 	}
 
 	cfgNodesByPaths := []configNodesByPath{{path: "", ConfigNodes: configNodes}}
 
-	// override configNodes
+	// override configNodes from child directories
 	overrideConfigDirs := getConfigDirsFromFilePaths(workDir, homeDir, filePaths)
 	for _, dir := range overrideConfigDirs {
-		configFiles, err := ioutil.ReadDir(dir)
-		if err != nil {
-			log.Fatal(err)
+		configNodes := compare.ConfigNodes{}
+
+		// Load remote configs for this override dir
+		remoteNodes := loadRemoteConfigNodes(dir)
+		for kind, node := range remoteNodes {
+			configNodes[kind] = node
 		}
 
-		configNodes := compare.ConfigNodes{}
-		for _, file := range configFiles {
-			if file.IsDir() {
-				continue
-			}
-			if !yamlFileRegex.MatchString(file.Name()) {
-				continue
-			}
-			cNode := &yaml.Node{}
-			path := fmt.Sprintf("%s/%s", dir, file.Name())
-			_, err := getYAML(cNode, path)
-			if err != nil {
-				log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
-			}
-			configNode := &compare.Node{Node: cNode}
-			compare.WalkConvertYamlNodeToMainNode(configNode)
-			compare.WalkParseLoadConfigComments(configNode)
-			if err := compare.WalkAndValidateConfig(configNode); err != nil {
-				log.Fatalf("error validating config file '%s': %v", path, err)
-			}
-			fileConfigs := compare.GetFileConfigs(configNode)
-			if fileConfigs.Kind == "" {
-				log.Fatalf("error determining schema for config file: %s: %v", path, err)
-			}
-			configNodes[fileConfigs.Kind] = configNode
+		// Load local config files (override remote)
+		localNodes := loadLocalConfigNodes(dir)
+		for kind, node := range localNodes {
+			configNodes[kind] = node
 		}
+
 		cfgNodesByPaths = append(cfgNodesByPaths, configNodesByPath{
 			path:        strings.ReplaceAll(dir, configDirName, ""),
 			ConfigNodes: configNodes,
@@ -164,6 +147,244 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 	})
 
 	return cfgNodesByPaths
+}
+
+// loadLocalConfigNodes reads local YAML config files from a .predictable-yaml directory.
+func loadLocalConfigNodes(dir string) compare.ConfigNodes {
+	configNodes := compare.ConfigNodes{}
+	configFiles, err := ioutil.ReadDir(dir)
+	if err != nil {
+		log.Fatalf("error reading dir '%s': %v", dir, err)
+	}
+	for _, file := range configFiles {
+		if file.IsDir() {
+			continue
+		}
+		if !yamlFileRegex.MatchString(file.Name()) {
+			continue
+		}
+		// Skip the .remote file
+		if file.Name() == remote.RemoteFileName {
+			continue
+		}
+		cNode := &yaml.Node{}
+		path := fmt.Sprintf("%s/%s", dir, file.Name())
+		_, err := getYAML(cNode, path)
+		if err != nil {
+			log.Fatalf("error parsing yaml for config file: %s: %v", path, err)
+		}
+		configNode := &compare.Node{Node: cNode}
+		compare.WalkConvertYamlNodeToMainNode(configNode)
+		compare.WalkParseLoadConfigComments(configNode)
+		if err := compare.WalkAndValidateConfig(configNode); err != nil {
+			log.Fatalf("error validating config file '%s': %v", path, err)
+		}
+		fileConfigs := compare.GetFileConfigs(configNode)
+		if fileConfigs.Kind == "" {
+			log.Fatalf("error determining schema for config file: %s: %v", path, err)
+		}
+		configNodes[fileConfigs.Kind] = configNode
+	}
+
+	return configNodes
+}
+
+// loadRemoteConfigNodes checks for a .remote file in the config directory,
+// fetches/caches the remote configs, and returns the parsed config nodes.
+// Returns nil if no .remote file exists.
+func loadRemoteConfigNodes(configDir string) compare.ConfigNodes {
+	remotePath := filepath.Join(configDir, remote.RemoteFileName)
+	if _, err := os.Stat(remotePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	rc, err := remote.ParseRemoteConfig(remotePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Check gitignore warnings
+	checkGitignoreWarnings(configDir)
+
+	cachePath, err := remote.FetchIfNeeded(rc, configDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	configNodes := compare.ConfigNodes{}
+	configFiles, err := ioutil.ReadDir(cachePath)
+	if err != nil {
+		log.Fatalf("error reading cached config dir '%s': %v", cachePath, err)
+	}
+	for _, file := range configFiles {
+		if file.IsDir() {
+			continue
+		}
+		if !yamlFileRegex.MatchString(file.Name()) {
+			continue
+		}
+		cNode := &yaml.Node{}
+		path := fmt.Sprintf("%s/%s", cachePath, file.Name())
+		_, err := getYAML(cNode, path)
+		if err != nil {
+			log.Fatalf("error parsing yaml for cached config file: %s: %v", path, err)
+		}
+		configNode := &compare.Node{Node: cNode}
+		compare.WalkConvertYamlNodeToMainNode(configNode)
+		compare.WalkParseLoadConfigComments(configNode)
+		if err := compare.WalkAndValidateConfig(configNode); err != nil {
+			log.Fatalf("error validating cached config file '%s': %v", path, err)
+		}
+		fileConfigs := compare.GetFileConfigs(configNode)
+		if fileConfigs.Kind == "" {
+			log.Fatalf("error determining schema for cached config file: %s: %v", path, err)
+		}
+		configNodes[fileConfigs.Kind] = configNode
+	}
+
+	return configNodes
+}
+
+// loadEmbeddedConfigNodes loads the built-in default config nodes from embedded configs.
+// Used as a fallback when no .remote file and no local configs exist.
+func loadEmbeddedConfigNodes() compare.ConfigNodes {
+	configNodes := compare.ConfigNodes{}
+	files, err := embedded.GetConfigFiles()
+	if err != nil {
+		log.Printf("WARNING: error loading embedded default configs: %v", err)
+		return configNodes
+	}
+	for name, data := range files {
+		if !yamlFileRegex.MatchString(name) {
+			continue
+		}
+		cNode := &yaml.Node{}
+		if err := yaml.Unmarshal(data, cNode); err != nil {
+			log.Printf("WARNING: error parsing embedded config '%s': %v", name, err)
+			continue
+		}
+		configNode := &compare.Node{Node: cNode}
+		compare.WalkConvertYamlNodeToMainNode(configNode)
+		compare.WalkParseLoadConfigComments(configNode)
+		if err := compare.WalkAndValidateConfig(configNode); err != nil {
+			log.Printf("WARNING: error validating embedded config '%s': %v", name, err)
+			continue
+		}
+		fileConfigs := compare.GetFileConfigs(configNode)
+		if fileConfigs.Kind == "" {
+			log.Printf("WARNING: unable to determine schema for embedded config '%s'", name)
+			continue
+		}
+		configNodes[fileConfigs.Kind] = configNode
+	}
+
+	return configNodes
+}
+
+// checkGitignoreWarnings prints warnings about gitignore state for remote config files.
+// These warnings print even with --quiet.
+func checkGitignoreWarnings(configDir string) {
+	// Find the git root by looking for .git directory
+	gitRoot := findGitRoot(configDir)
+	if gitRoot == "" {
+		return
+	}
+
+	// Check if .cache/ is gitignored
+	cacheDirRel := getCacheRelPath(gitRoot, configDir)
+	if cacheDirRel != "" && !isGitignored(gitRoot, cacheDirRel) {
+		log.Printf("WARNING: '%s' is not gitignored. Add it to your .gitignore to avoid committing cached remote configs.", cacheDirRel)
+	}
+
+	// Check if .remote is gitignored
+	remoteFileRel := getRemoteRelPath(gitRoot, configDir)
+	if remoteFileRel != "" && isGitignored(gitRoot, remoteFileRel) {
+		log.Printf("WARNING: '%s' is gitignored. This file should be committed so all users of this repo use the same config version.", remoteFileRel)
+	}
+}
+
+// findGitRoot searches upward from dir to find the directory containing .git.
+func findGitRoot(dir string) string {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return ""
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(absDir, ".git")); err == nil {
+			return absDir
+		}
+		parent := filepath.Dir(absDir)
+		if parent == absDir {
+			return ""
+		}
+		absDir = parent
+	}
+}
+
+// getCacheRelPath returns the relative path from gitRoot to the cache directory.
+func getCacheRelPath(gitRoot, configDir string) string {
+	absConfigDir, err := filepath.Abs(configDir)
+	if err != nil {
+		return ""
+	}
+	cachePath := filepath.Join(absConfigDir, remote.CacheDirName)
+	rel, err := filepath.Rel(gitRoot, cachePath)
+	if err != nil {
+		return ""
+	}
+
+	return rel
+}
+
+// getRemoteRelPath returns the relative path from gitRoot to the .remote file.
+func getRemoteRelPath(gitRoot, configDir string) string {
+	absConfigDir, err := filepath.Abs(configDir)
+	if err != nil {
+		return ""
+	}
+	remotePath := filepath.Join(absConfigDir, remote.RemoteFileName)
+	rel, err := filepath.Rel(gitRoot, remotePath)
+	if err != nil {
+		return ""
+	}
+
+	return rel
+}
+
+// isGitignored checks if a path is ignored by git by scanning .gitignore files.
+// This is a simple check that looks at the .gitignore in the git root.
+func isGitignored(gitRoot, relPath string) bool {
+	gitignorePath := filepath.Join(gitRoot, ".gitignore")
+	file, err := os.Open(gitignorePath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	// Normalize path separators and check with/without trailing slash
+	relPath = filepath.ToSlash(relPath)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Normalize the gitignore pattern
+		pattern := filepath.ToSlash(line)
+		pattern = strings.TrimSuffix(pattern, "/")
+		checkPath := strings.TrimSuffix(relPath, "/")
+
+		if pattern == checkPath {
+			return true
+		}
+		// Also check if a parent directory is ignored
+		if strings.HasPrefix(checkPath, pattern+"/") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // configNodesForPath returns a proper set of config nodes for a particular file path.

@@ -99,6 +99,28 @@ Clone the repo and `go install`.
     * Lines can be configured to be first, required, or to 'ditto' the configs under another line.
 * Pass a directory path to search it recursively for yaml files, or file paths to just test those files, or any combination of the two.
 
+## Remote Configs
+Instead of maintaining `.predictable-yaml` config directories in every repo, you can point to a remote config repository. Create a `.predictable-yaml/.remote` file:
+```yaml
+# Uses the default config repo (github.com/snarlysodboxer/predictable-yaml-configs)
+version: v1.0.0
+```
+```yaml
+# Custom repo, pinned to a tag
+remote: https://github.com/my-org/my-yaml-configs
+version: v2.3.0
+```
+The `version` field accepts any git ref: a tag, commit SHA, or branch name.
+
+Configs are fetched once and cached locally in `.predictable-yaml/.cache/`. When the version is bumped in `.remote`, the cache is automatically updated on the next run.
+
+* `.predictable-yaml/.cache/` should be gitignored.
+* `.predictable-yaml/.remote` should be committed.
+* Local config files in `.predictable-yaml/` still override remote configs.
+* Nested `.remote` files in subdirectories work the same as nested local configs.
+* GitHub, GitLab, and Bitbucket are supported. Private repos use `GITHUB_TOKEN`, `GITLAB_TOKEN`, or `BITBUCKET_TOKEN` env vars, falling back to local git credentials.
+* If no `.remote` file and no local configs exist, built-in default configs are used.
+
 ## Config files
 * Supports multiple config schema files. Place them in the config directory.
     * Config type can be configured with the comment `# predictable-yaml: kind=my-schema`, but if this is not found, we'll attempt to get it from the Kubernetes-esq `kind: my-schema`, value. If neither are found, an error will be thrown.
@@ -150,6 +172,13 @@ __Config comments in target files must be before, inline, or after the first lin
     * Change to the begining with the flag `--unmatched-to-beginning`.
 * Missing required keys will be added unless `ignore-requireds` is set as a [per file override](#configuring-per-file-overrides).
 * Lines can be set to `# preferred` to allow linting to pass without them, but make the fixer add them when fixing, and the `--add-preferred` flag is set.
+
+## Building
+```shell
+# Build for current platform
+go generate ./internal/embedded/  # fetch default configs
+go build -o predictable-yaml
+```
 
 ## Tests
 * Run with `go test ./...`.
