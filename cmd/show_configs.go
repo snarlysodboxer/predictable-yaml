@@ -56,10 +56,11 @@ var showConfigsCmd = &cobra.Command{
 			if err != nil {
 				log.Fatal(err)
 			}
+			configDirs = filterEmptyConfigDirs(configDirs)
 		}
 
 		if len(configDirs) == 0 && configDirFlag == "" {
-			fmt.Println("No .predictable-yaml directories found.")
+			fmt.Println("No .predictable-yaml configs found.")
 		}
 
 		// Check each config dir for remote and local configs

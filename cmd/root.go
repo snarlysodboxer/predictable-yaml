@@ -84,6 +84,9 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 		}
 	}
 
+	// filter out empty config dirs (no .remote file and no YAML files)
+	configDirs = filterEmptyConfigDirs(configDirs)
+
 	// regular configNodes
 	// override more root configs with more specific configs
 	configNodes := compare.ConfigNodes{}
@@ -417,6 +420,31 @@ func getYAML(node *yaml.Node, file string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// filterEmptyConfigDirs removes config dirs that contain no .remote file and no YAML files.
+func filterEmptyConfigDirs(configDirs []string) []string {
+	var filtered []string
+	for _, dir := range configDirs {
+		// Check for .remote file
+		if _, err := os.Stat(filepath.Join(dir, remote.RemoteFileName)); err == nil {
+			filtered = append(filtered, dir)
+			continue
+		}
+		// Check for any YAML files
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && yamlFileRegex.MatchString(entry.Name()) {
+				filtered = append(filtered, dir)
+				break
+			}
+		}
+	}
+
+	return filtered
 }
 
 // walkFindParentConfigDirs walks up the tree from dir (starting with working directory,) to homeDir or root, returning a list of discovered configDirs.
