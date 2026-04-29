@@ -1814,3 +1814,176 @@ spec:
 		// }
 	}
 }
+
+func TestWalkFindNullValues(t *testing.T) {
+	type testCase struct {
+		note         string
+		expectedErrs ValidationErrors
+		configYamls  []string
+		fileYaml     string
+	}
+
+	testCases := []testCase{
+		{
+			note: "null value where map expected",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: null value at '.spec.template.spec.containers[0].livenessProbe' — remove it or set a value"),
+			},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          httpGet:
+            path: TODO`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        livenessProbe: null`,
+		},
+		{
+			note: "implicit null value where map expected",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: null value at '.spec.template.spec.containers[0].livenessProbe' — remove it or set a value"),
+			},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          httpGet:
+            path: TODO`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        livenessProbe:`,
+		},
+		{
+			note: "tilde null value where map expected",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: null value at '.spec.template.spec.containers[0].livenessProbe' — remove it or set a value"),
+			},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          httpGet:
+            path: TODO`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        livenessProbe: ~`,
+		},
+		{
+			note:         "null value where scalar expected is ok",
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        image: TODO`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        image: null`,
+		},
+		{
+			note:         "no null values",
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # first, required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          httpGet:
+            path: TODO`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        livenessProbe:
+          httpGet:
+            path: /healthz`,
+		},
+	}
+
+	for _, tc := range testCases {
+		configNodes := ConfigNodes{}
+		for _, cYaml := range tc.configYamls {
+			cN := &yaml.Node{}
+			err := yaml.Unmarshal([]byte(cYaml), cN)
+			if err != nil {
+				t.Errorf("Description: %s: compare.WalkFindNullValues(...): failed unmarshaling config test data!", tc.note)
+				continue
+			}
+			configNode := &Node{Node: cN}
+			WalkConvertYamlNodeToMainNode(configNode)
+			WalkParseLoadConfigComments(configNode)
+			if err := WalkAndValidateConfig(configNode); err != nil {
+				t.Errorf("Description: %s: compare.WalkFindNullValues(...): unexpected config validation error: %v", tc.note, err)
+				continue
+			}
+			fileConfigs := GetFileConfigs(configNode)
+			if fileConfigs.Kind == "" {
+				t.Errorf("Description: %s: compare.WalkFindNullValues(...): failed getting kind for config test data!", tc.note)
+			}
+			configNodes[fileConfigs.Kind] = configNode
+		}
+
+		fN := &yaml.Node{}
+		err := yaml.Unmarshal([]byte(tc.fileYaml), fN)
+		if err != nil {
+			t.Errorf("Description: %s: compare.WalkFindNullValues(...): failed unmarshaling file test data: %v", tc.note, err)
+			continue
+		}
+		fileNode := &Node{Node: fN}
+		WalkConvertYamlNodeToMainNode(fileNode)
+		fileConfigs := GetFileConfigs(fileNode)
+
+		sortConfigs := SortConfigs{
+			ConfigNodes: configNodes,
+			FileConfigs: fileConfigs,
+		}
+		gotErrs := WalkFindNullValues(configNodes[fileConfigs.Kind], fileNode, sortConfigs, ValidationErrors{})
+		expected := GetValidationErrorStrings(tc.expectedErrs)
+		got := GetValidationErrorStrings(gotErrs)
+		if got != expected {
+			t.Errorf("Description: %s: compare.WalkFindNullValues(...): \n-expected:\n%v\n+got:\n%v\n", tc.note, expected, got)
+		}
+	}
+}

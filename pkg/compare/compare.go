@@ -204,6 +204,63 @@ func WalkAndValidateConfig(node *Node) error {
 	return nil
 }
 
+// WalkFindNullValues walks the config and file trees together, returning errors for any
+// null values in the file where the config expects a non-scalar type (map or sequence).
+// This should be called before WalkAndCompare or WalkAndSort to catch nulls with correct paths.
+func WalkFindNullValues(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
+	switch configNode.Kind {
+	case yaml.DocumentNode:
+		if fileNode.Kind != yaml.DocumentNode {
+			return errs
+		}
+
+		return WalkFindNullValues(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
+	case yaml.MappingNode:
+		if fileNode.Kind != yaml.MappingNode {
+			return errs
+		}
+		configPairs := GetKeyValuePairs(configNode.NodeContent)
+		filePairs := GetKeyValuePairs(fileNode.NodeContent)
+		for _, configPair := range configPairs {
+			for _, filePair := range filePairs {
+				if filePair.Key != configPair.Key {
+					continue
+				}
+				if filePair.ValueNode.Tag == "!!null" && configPair.ValueNode.Kind != yaml.ScalarNode {
+					errs = append(errs, fmt.Errorf("validation error: null value at '%s' — remove it or set a value", GetReferencePath(filePair.KeyNode, 0, "")))
+					break
+				}
+				if configPair.KeyNode.Ditto != "" {
+					cN, err := getConfigValueNodeForDitto(configPair, sortConfs)
+					if err != nil {
+						break
+					}
+					if filePair.ValueNode.Tag == "!!null" && cN.Kind != yaml.ScalarNode {
+						errs = append(errs, fmt.Errorf("validation error: null value at '%s' — remove it or set a value", GetReferencePath(filePair.KeyNode, 0, "")))
+						break
+					}
+					errs = WalkFindNullValues(cN, filePair.ValueNode, sortConfs, errs)
+				} else {
+					errs = WalkFindNullValues(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
+				}
+
+				break
+			}
+		}
+	case yaml.SequenceNode:
+		if fileNode.Kind != yaml.SequenceNode {
+			return errs
+		}
+		if len(configNode.NodeContent) > 0 {
+			for _, fNode := range fileNode.NodeContent {
+				errs = WalkFindNullValues(configNode.NodeContent[0], fNode, sortConfs, errs)
+			}
+		}
+	}
+
+	return errs
+}
+
 // WalkAndCompare walks the tree and does the validation
 func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
 	switch configNode.Kind {

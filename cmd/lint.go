@@ -94,7 +94,10 @@ var lintCmd = &cobra.Command{
 				ConfigNodes: configNodes,
 				FileConfigs: fileConfigs,
 			}
-			errs := compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			errs := compare.WalkFindNullValues(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			if len(errs) == 0 {
+				errs = compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			}
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))

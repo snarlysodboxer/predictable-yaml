@@ -119,6 +119,14 @@ var fixCmd = &cobra.Command{
 				AddPreferreds:        addPreferreds,
 				AddedFields:          &addedFields,
 			}
+			// check for null values before sorting
+			nullErrs := compare.WalkFindNullValues(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			if len(nullErrs) != 0 {
+				success = false
+				log.Printf("File '%s' has fix errors:\n%v", filePath, compare.GetValidationErrorStrings(nullErrs))
+				continue
+			}
+
 			// only sort if validation fails
 			if validate {
 				errs := compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
