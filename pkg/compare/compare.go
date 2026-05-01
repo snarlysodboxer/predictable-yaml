@@ -187,6 +187,12 @@ func WalkAndValidateConfig(node *Node) error {
 			return fmt.Errorf("configuration error: multiple keys marked as 'first' in the same map at path '%s', keys: %s", filePath, keysStr)
 		}
 
+		// Check that a key marked 'first' is actually the first key in the config
+		if len(firstKeys) == 1 && len(pairs) > 0 && pairs[0].Key != firstKeys[0] {
+			filePath := GetReferencePath(node, 0, "")
+			return fmt.Errorf("configuration error: key '%s' is marked as 'first' but is not the first key in the map at path '%s'", firstKeys[0], filePath)
+		}
+
 		// Recursively validate child nodes
 		for _, pair := range pairs {
 			if err := WalkAndValidateConfig(pair.ValueNode); err != nil {
@@ -201,6 +207,7 @@ func WalkAndValidateConfig(node *Node) error {
 			}
 		}
 	}
+
 	return nil
 }
 

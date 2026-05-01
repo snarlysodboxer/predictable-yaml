@@ -686,6 +686,33 @@ spec:  # required
 			errorMsg:    "configuration error: multiple keys marked as 'first' in the same map at path '.spec.template.metadata', keys: 'name', 'namespace'",
 		},
 		{
+			note: "first directive on key that is not first in config should error",
+			configYaml: `---
+apiVersion: gateway.networking.k8s.io/v1  # first, required
+kind: HTTPRoute  # required
+metadata:  # required
+  name: TODO  # first, required
+spec:  # required
+  hostnames: []  # required
+  parentRefs:  # first, required
+  - name: TODO  # required`,
+			expectError: true,
+			errorMsg:    "configuration error: key 'parentRefs' is marked as 'first' but is not the first key in the map at path '.spec'",
+		},
+		{
+			note: "first directive on key that is not first in nested sequence map should error",
+			configYaml: `---
+kind: Deployment  # first
+spec:  # required
+  template:  # required
+    spec:  # required
+      containers:
+      - image: TODO
+        name: TODO  # first, required`,
+			expectError: true,
+			errorMsg:    "configuration error: key 'name' is marked as 'first' but is not the first key in the map at path '.spec.template.spec.containers[0]'",
+		},
+		{
 			note: "first directives in different maps should be valid",
 			configYaml: `---
 apiVersion: apps/v1  # first, required

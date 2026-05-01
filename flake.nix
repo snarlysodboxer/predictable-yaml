@@ -19,12 +19,12 @@
         predictable-yaml-configs = pkgs.fetchFromGitHub {
           owner = "snarlysodboxer";
           repo = "predictable-yaml-configs";
-          rev = "v1.0.3";
-          hash = "sha256-2FJOzXISFwZ30XG8BUeWR4NmrPuXbUFuld2UZQ5UxF8=";
+          rev = "v1.0.4";
+          hash = "sha256-Sm8OKSsSSL19cpNoGiqbX9lTzeNQVzg9xx7Gn4xjSKI=";
         };
         predictable-yaml = pkgs.buildGoModule {
           pname = "predictable-yaml";
-          version = "v0.2.1";
+          version = "v0.2.2";
           src = ./.;
           vendorHash = "sha256-BqMayrlLSgOx4tuAl2vyQnUjLm7WizfMxdNc/ku+KGk=";
           env.CGO_ENABLED = "0";
