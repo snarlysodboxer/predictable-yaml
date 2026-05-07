@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,7 +27,8 @@ import (
 
 // PreserveComments attempts to preserve the spacing before all comments
 // walk matching nodes, and for each that has (Head|Line|Foot)Comment != "",
-//   overwrite the newContent spacing and comment with the oldContent spacing and comment.
+//
+//	overwrite the newContent spacing and comment with the oldContent spacing and comment.
 func PreserveComments(oldContent, newContent []byte) ([]byte, error) {
 	// parse old yaml
 	oldYamlNode := &yaml.Node{}
@@ -96,7 +97,7 @@ func walkAndFix(oldLinesMap, newLinesMap map[int]string, oldNode, newNode *compa
 	if oldNode.HeadComment != "" {
 		err := fixHeadComment(oldLinesMap, newLinesMap, oldNode, newNode)
 		if err != nil {
-			log.Println(err)
+			log.Printf("WARNING: could not preserve head comment at line %d: %v", oldNode.Line, err)
 		}
 	}
 
@@ -110,7 +111,7 @@ func walkAndFix(oldLinesMap, newLinesMap map[int]string, oldNode, newNode *compa
 	if oldNode.FootComment != "" {
 		err := fixFootComment(oldLinesMap, newLinesMap, oldNode, newNode)
 		if err != nil {
-			log.Println(err)
+			log.Printf("WARNING: could not preserve foot comment at line %d: %v", oldNode.Line, err)
 		}
 	}
 

@@ -19,16 +19,18 @@
         predictable-yaml-configs = pkgs.fetchFromGitHub {
           owner = "snarlysodboxer";
           repo = "predictable-yaml-configs";
-          rev = "v1.0.4";
-          hash = "sha256-Sm8OKSsSSL19cpNoGiqbX9lTzeNQVzg9xx7Gn4xjSKI=";
+          rev = "v1.0.5";
+          hash = "sha256-WGeqbhaw+jDx81DsWQAnzp6tpMP8PqswqGY+lUI7qj8=";
         };
         predictable-yaml = pkgs.buildGoModule {
           pname = "predictable-yaml";
-          version = "v0.2.2";
+          version = "v0.3.0";
           src = ./.;
-          vendorHash = "sha256-BqMayrlLSgOx4tuAl2vyQnUjLm7WizfMxdNc/ku+KGk=";
+          vendorHash = "sha256-Q6NvALG9KKsepYlUJ+wOmDVIfhQmOlYvr68uxkQ6pZ0=";
           env.CGO_ENABLED = "0";
-          ldflags = [ "-X github.com/snarlysodboxer/predictable-yaml/cmd.Version=${predictable-yaml.version}" ];
+          ldflags = [
+            "-X github.com/snarlysodboxer/predictable-yaml/cmd.Version=${predictable-yaml.version}"
+          ];
           nativeBuildInputs = [ pkgs.installShellFiles ];
           preBuild = ''
             cp ${predictable-yaml-configs}/*.yaml internal/embedded/configs/ || true

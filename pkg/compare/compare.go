@@ -238,7 +238,7 @@ func WalkFindNullValues(configNode, fileNode *Node, sortConfs SortConfigs, errs 
 					break
 				}
 				if configPair.KeyNode.Ditto != "" {
-					cN, err := getConfigValueNodeForDitto(configPair, sortConfs)
+					cN, err := configNodeForDitto(configPair, filePair, sortConfs)
 					if err != nil {
 						break
 					}
@@ -296,24 +296,12 @@ func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs Vali
 				if configPair.KeyNode.Ditto == "" {
 					errs = WalkAndCompare(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
 				} else {
-					// handle dittos
-					cN, err := getConfigValueNodeForDitto(configPair, sortConfs)
+					cN, err := configNodeForDitto(configPair, filePair, sortConfs)
 					if err != nil {
 						errs = append(errs, err)
 						break
 					}
-					switch {
-					case endsWithDot.Match([]byte(configPair.KeyNode.Ditto)) && filePair.ValueNode.Kind == yaml.SequenceNode && cN.Kind == yaml.MappingNode:
-						wrappedInSequence := &Node{
-							Node: &yaml.Node{
-								Kind: yaml.SequenceNode,
-							},
-							NodeContent: []*Node{cN},
-						}
-						errs = WalkAndCompare(wrappedInSequence, filePair.ValueNode, sortConfs, errs)
-					default:
-						errs = WalkAndCompare(cN, filePair.ValueNode, sortConfs, errs)
-					}
+					errs = WalkAndCompare(cN, filePair.ValueNode, sortConfs, errs)
 					break
 				}
 				break
@@ -368,26 +356,12 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 				if configPair.KeyNode.Ditto == "" {
 					errs = WalkAndSort(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
 				} else {
-					// handle dittos
-					cN, err := getConfigValueNodeForDitto(configPair, sortConfs)
+					cN, err := configNodeForDitto(configPair, filePair, sortConfs)
 					if err != nil {
 						errs = append(errs, err)
 						break
 					}
-					// TODO this way of handling mismatched kinds feels clumsy,
-					//   here and in WalkAndCompare.
-					switch {
-					case endsWithDot.Match([]byte(configPair.KeyNode.Ditto)) && filePair.ValueNode.Kind == yaml.SequenceNode && cN.Kind == yaml.MappingNode:
-						wrappedInSequence := &Node{
-							Node: &yaml.Node{
-								Kind: yaml.SequenceNode,
-							},
-							NodeContent: []*Node{cN},
-						}
-						errs = WalkAndSort(wrappedInSequence, filePair.ValueNode, sortConfs, errs)
-					default:
-						errs = WalkAndSort(cN, filePair.ValueNode, sortConfs, errs)
-					}
+					errs = WalkAndSort(cN, filePair.ValueNode, sortConfs, errs)
 				}
 				break
 			}
@@ -580,7 +554,7 @@ func getConfigValueNodeForDitto(configPair KeyValuePair, sortConfs SortConfigs) 
 // GetKeyValuePairs builds a list of KeyValuePairs
 func GetKeyValuePairs(nodeContent []*Node) []KeyValuePair {
 	if !(len(nodeContent)%2 == 0) {
-		panic("expected an even number of nodes")
+		panic(fmt.Sprintf("internal error: expected an even number of nodes in mapping, got %d", len(nodeContent)))
 	}
 
 	keyValuePairs := []KeyValuePair{}
@@ -742,9 +716,28 @@ func walkToNodeForPath(node *Node, path string, currentPathIndex int) (*Node, er
 	return nil, fmt.Errorf("configuration error: '%s' configuration node not found", path)
 }
 
+// configNodeForDitto resolves the config node for a ditto reference, wrapping
+// it in a synthetic sequence node when the ditto path points to a mapping but
+// the file node is a sequence (e.g. ditto=.spec.containers. used on a list field).
+func configNodeForDitto(configPair KeyValuePair, filePair KeyValuePair, sortConfs SortConfigs) (*Node, error) {
+	cN, err := getConfigValueNodeForDitto(configPair, sortConfs)
+	if err != nil {
+		return nil, err
+	}
+	if endsWithDot.Match([]byte(configPair.KeyNode.Ditto)) && filePair.ValueNode.Kind == yaml.SequenceNode && cN.Kind == yaml.MappingNode {
+		return &Node{
+			Node: &yaml.Node{
+				Kind: yaml.SequenceNode,
+			},
+			NodeContent: []*Node{cN},
+		}, nil
+	}
+	return cN, nil
+}
+
 func firstScalarOfLine(node *Node) *Node {
 	if node.ParentNode == nil {
-		panic(fmt.Sprintf("expected node to have parentNode: %#v", node.Node))
+		panic(fmt.Sprintf("internal error: expected node to have parentNode, value: %q, line: %d", node.Value, node.Line))
 	}
 	for index, innerNode := range node.ParentNode.NodeContent {
 		if innerNode == node {
