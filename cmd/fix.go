@@ -28,7 +28,9 @@ import (
 	"github.com/kylelemons/godebug/diff"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/indentation"
+	"github.com/snarlysodboxer/predictable-yaml/pkg/moves"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/whitespace"
+	"github.com/snarlysodboxer/skedaddle"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -45,6 +47,7 @@ var (
 	preserveEmptyLines      bool
 	preserveComments        bool
 	disablePostProcessing   bool
+	diffMode                string
 )
 
 // fixCmd represents the fix command
@@ -202,8 +205,11 @@ var fixCmd = &cobra.Command{
 				}
 				doFix := true
 				if shouldPrompt {
-					fmt.Printf("\n%s\n", diff.Diff(existingFileContentsStr, fileContentsStr))
+					usedGraphic := showDiff(existingFileContentsStr, fileContentsStr)
 					doFix = promptForConfirmation(fmt.Sprintf("Do you want to write these changes to '%s'?", filePath))
+					if usedGraphic {
+						skedaddle.ClearImages()
+					}
 				}
 
 				if !doFix {
@@ -251,6 +257,36 @@ func init() {
 	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable preserve-empty-lines, preserve-comments, and reduce-list-indentation-by")
 	fixCmd.PersistentFlags().BoolVar(&disablePostProcessing, "disable-all-experiments", false, "deprecated: use --disable-post-processing")
 	_ = fixCmd.PersistentFlags().MarkDeprecated("disable-all-experiments", "use --disable-post-processing instead")
+	fixCmd.PersistentFlags().StringVar(&diffMode, "diff-mode", "graphic", "diff display mode: 'graphic' (inline image with move lines) or 'text' (traditional unified diff)")
+}
+
+func showDiff(oldText, newText string) bool {
+	if diffMode == "graphic" {
+		if !skedaddle.CanRenderGraphics() {
+			log.Println("WARNING: graphic diff mode requested but terminal does not support inline images, falling back to text diff")
+		} else {
+			mvs, err := moves.Compute(oldText, newText)
+			if err == nil && len(mvs) > 0 {
+				skedaddleMoves := make([]skedaddle.Move, len(mvs))
+				for i, m := range mvs {
+					skedaddleMoves[i] = skedaddle.Move{
+						FromStart: m.FromStart,
+						FromEnd:   m.FromEnd,
+						ToStart:   m.ToStart,
+						ToEnd:     m.ToEnd,
+					}
+				}
+				err = skedaddle.Render(oldText, newText, skedaddleMoves, os.Stdout)
+				if err == nil {
+					fmt.Println()
+					return true
+				}
+				log.Printf("WARNING: graphic diff failed, falling back to text: %v", err)
+			}
+		}
+	}
+	fmt.Printf("\n%s\n", diff.Diff(oldText, newText))
+	return false
 }
 
 func countLines(str string, separator rune) int {
