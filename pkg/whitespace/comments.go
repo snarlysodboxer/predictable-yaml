@@ -232,13 +232,13 @@ Found:
 		}
 	}
 
+	if !found {
+		return fmt.Errorf("warning: unable to find where this HeadComment came from, skipping: '%s'", oldNode.HeadComment)
+	}
+
 	// update values with old versions
 	for index := 0; index < oldCount; index++ {
 		newLinesMap[newLineNumber-index-1] = oldLinesMap[oldLineNumber-index-1]
-	}
-
-	if !found {
-		return fmt.Errorf("warning: unable to find where this HeadComment came from, skipping: '%s'", oldNode.HeadComment)
 	}
 
 	return nil
@@ -318,13 +318,13 @@ Found:
 		}
 	}
 
+	if !found {
+		return fmt.Errorf("warning: unable to find where this FootComment came from, skipping: '%s'", oldNode.FootComment)
+	}
+
 	// update values with old versions
 	for index := 0; index < oldCount; index++ {
 		newLinesMap[newLineNumber+index+1] = oldLinesMap[oldLineNumber+index+1]
-	}
-
-	if !found {
-		return fmt.Errorf("warning: unable to find where this FootComment came from, skipping: '%s'", oldNode.FootComment)
 	}
 
 	return nil
