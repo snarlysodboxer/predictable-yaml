@@ -18,7 +18,7 @@ predictable-yaml lint my-k8s-manifests/
 predictable-yaml fix my-k8s-manifests/
 ```
 
-Out of the box, `predictable-yaml` knows how to lint and fix Deployments, Services, Pods, ConfigMaps, CronJobs, Ingresses, and [many more Kubernetes types](https://github.com/snarlysodboxer/predictable-yaml-configs). No configuration required.
+Out of the box, `predictable-yaml` ships with opinionated configs for linting and fixing Deployments, Services, Pods, ConfigMaps, CronJobs, Ingresses, and [many more Kubernetes types](https://github.com/snarlysodboxer/predictable-yaml-configs). No configuration is required, but you can bring your own configs/schemas if you prefer.
 
 ## Install
 
@@ -67,35 +67,72 @@ go install
 
 1. **`--config-dir` flag** - If specified, only configs from that directory are used.
 2. **Local `.predictable-yaml/` directories** - Searched up the directory tree from the working directory and down into target paths. Subdirectory configs override parent configs for files under that path.
-3. **Remote configs** - Fetched from a git repository specified in `.predictable-yaml/.remote`.
+3. **Remote configs** - Fetched from a git repository specified in `.predictable-yaml.yaml` (or the legacy `.predictable-yaml/.remote`).
 4. **Built-in defaults** - Kubernetes/Kustomize schemas embedded in the binary.
 
-For most Kubernetes projects, the built-in defaults work without any configuration. For custom schemas or to pin a specific config version, use remote configs.
+The built-in defaults will work without any configuration. You may want to pin a specific config version using a project config file, or even set up your own custom schemas.
 
-### Remote Configs
+### Project Config File
 
-Instead of maintaining `.predictable-yaml` config directories in every repo, point to a remote config repository. Create a `.predictable-yaml/.remote` file:
+Create a `.predictable-yaml.yaml` file in your project root to configure remote configs and fixer defaults:
 
 ```yaml
-# Uses the default config repo (github.com/snarlysodboxer/predictable-yaml-configs)
-version: v1.0.0
+# Pin a version of the default config repo
+remote:
+  version: v1.0.5
 ```
 
 ```yaml
-# Custom repo, pinned to a tag
-remote: https://github.com/my-org/my-yaml-configs
-version: v2.3.0
+# Custom repo, pinned to a tag, with fixer defaults
+# The `version` field accepts any git ref: a tag, commit SHA, or branch name.
+remote:
+  url: https://github.com/my-org/my-yaml-configs
+  version: v2.3.0
+fixer:
+  indentation-level: 4
+  compact-lists: false
 ```
 
-The `version` field accepts any git ref: a tag, commit SHA, or branch name.
+The file is searched up the directory tree from the working directory, similar to `.golangci.yml` or `.prettierrc`. The closest config file to the working directory wins.
 
-Configs are fetched once and cached locally in `.predictable-yaml/.cache/`. When the version is bumped in `.remote`, the cache is automatically updated on the next run.
+**Fields:**
+
+**Top-level fields:**
+
+| Field | Description |
+|-------|-------------|
+| `config-dir` | Directory containing schema config files |
+
+**`remote:` fields:**
+
+| Field | Description |
+|-------|-------------|
+| `url` | Git repository URL (defaults to [predictable-yaml-configs](https://github.com/snarlysodboxer/predictable-yaml-configs)) |
+| `version` | Git ref to fetch (tag, commit SHA, or branch name) |
+
+**`fixer:` fields** (all overridden by their corresponding CLI flag):
+
+| Field | Description |
+|-------|-------------|
+| `indentation-level` | YAML indentation spaces (default: 2) |
+| `compact-lists` | Make `- ` count as indentation (default: true) |
+| `add-preferred` | Add preferred keys when adding missing keys (default: false) |
+| `disable-post-processing` | Disable all post-processing (default: false) |
+| `prompt` | Show diff and prompt before making changes (default: true) |
+| `prompt-if-line-count-change` | Only prompt if line count changes (default: false) |
+| `unmatched-to-beginning` | Move unmatched keys to beginning instead of end (default: false) |
+| `validate` | Only sort if validation fails (default: true) |
+
+Configs are fetched once and cached locally in `.predictable-yaml/.cache/`. When the version is bumped, the cache is automatically updated on the next run.
 
 - `.predictable-yaml/.cache/` should be gitignored.
-- `.predictable-yaml/.remote` should be committed.
-- Local config files in `.predictable-yaml/` still override remote configs.
-- Nested `.remote` files in subdirectories work the same as nested local configs.
+- `.predictable-yaml.yaml` should be committed.
+- Local config files in `.predictable-yaml/` override remote configs.
 - GitHub, GitLab, and Bitbucket are supported. Private repos use `GITHUB_TOKEN`, `GITLAB_TOKEN`, or `BITBUCKET_TOKEN` env vars, falling back to local git credentials.
+
+### Legacy: `.predictable-yaml/.remote`
+
+The `.predictable-yaml/.remote` file is still supported for backward compatibility. If `.predictable-yaml.yaml` exists with `remote`/`version`, it takes precedence and a deprecation warning is logged if `.remote` also exists. To migrate, move `remote` and `version` from `.predictable-yaml/.remote` to `.predictable-yaml.yaml` and delete the `.remote` file.
 
 ### Show Active Configs
 
@@ -168,8 +205,8 @@ export PREDICTABLE_YAML_DIFF="difft"
 
 - **Key reordering** - Reorders keys to match the config schema. Always produces valid YAML.
 - **Structural summary** - Shows a YAML-like summary of what moved and what was added, with comment preservation status.
-- **Preserve empty lines** - Associates empty lines with the YAML key following them and reinserts them after reordering. Reinserts trailing empty lines if present in the original. *(enabled by default, disable with `--preserve-empty-lines=false`)*
-- **Preserve comments** - Replaces comment spacing with the original versions after reordering. *(enabled by default, disable with `--preserve-comments=false`)*
+- **Preserve empty lines** - Associates empty lines with the YAML key following them and reinserts them after reordering. Reinserts trailing empty lines if present in the original.
+- **Preserve comments** - Replaces comment spacing with the original versions after reordering.
 - **Compact lists** - Makes `- ` count as part of the indentation for list items, so `-` is even with the parent key instead of indented. *(enabled by default, disable with `--compact-lists=false`)*
 - **Add missing keys** - Adds required keys that are missing from the file. Preferred keys can also be added with `--add-preferred`.
 - **Unmatched key placement** - Keys in the file that aren't in the config are moved to the end of their map by default. Use `--unmatched-to-beginning` to move them to the start instead.
@@ -188,7 +225,7 @@ export PREDICTABLE_YAML_DIFF="difft"
 - Head comment indentation: yaml.v3 normalizes head comment indentation during parsing. The fixer restores original indentation in most cases by searching for comment text in surrounding nodes, but there may be edge cases where the comment gets re-indented to match the key's indentation level.
 
 **Empty line handling:**
-- Whitespace preservation is not perfect in every circumstance, as it involves inferring intent from empty lines. Disable with `--preserve-empty-lines=false` if results are unexpected.
+- Whitespace preservation is not perfect in every circumstance, as it involves inferring intent from empty lines. Disable with `-d` if results are unexpected.
 - Empty lines are associated with the YAML node on the line below them. When keys are reordered, the empty line moves with the key it was above. This is usually the desired behavior, but may occasionally produce unexpected results.
 - Multiple consecutive empty lines (2+) are preserved correctly.
 

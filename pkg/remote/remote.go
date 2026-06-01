@@ -36,54 +36,54 @@ const (
 	CacheDirName   = ".cache"
 )
 
-// RemoteConfig represents the contents of a .predictable-yaml/.remote file.
-type RemoteConfig struct {
+// LegacyRemoteConfig represents the contents of a .predictable-yaml/.remote file.
+type LegacyRemoteConfig struct {
 	Remote  string `yaml:"remote"`
 	Version string `yaml:"version"`
 }
 
 // ParseRemoteConfig reads and parses a .remote file.
-func ParseRemoteConfig(path string) (*RemoteConfig, error) {
+func ParseRemoteConfig(path string) (*LegacyRemoteConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading remote config '%s': %w", path, err)
 	}
 
-	rc := &RemoteConfig{}
-	if err := yaml.Unmarshal(data, rc); err != nil {
+	remoteConfig := &LegacyRemoteConfig{}
+	if err := yaml.Unmarshal(data, remoteConfig); err != nil {
 		return nil, fmt.Errorf("error parsing remote config '%s': %w", path, err)
 	}
 
-	if rc.Version == "" {
+	if remoteConfig.Version == "" {
 		return nil, fmt.Errorf("remote config '%s': 'version' is required (git tag, commit SHA, or branch name)", path)
 	}
 
-	if rc.Remote == "" {
-		rc.Remote = DefaultRemote
+	if remoteConfig.Remote == "" {
+		remoteConfig.Remote = DefaultRemote
 	}
 
-	return rc, nil
+	return remoteConfig, nil
 }
 
-// CachePath returns the local cache directory path for this remote config.
+// CachePath returns the local cache directory path for a remote URL and version.
 // Format: {configDir}/.cache/{host}/{owner}/{repo}/{ref}/
-func (rc *RemoteConfig) CachePath(configDir string) (string, error) {
-	parsed, err := url.Parse(rc.Remote)
+func CachePath(remoteURL, version, configDir string) (string, error) {
+	parsed, err := url.Parse(remoteURL)
 	if err != nil {
-		return "", fmt.Errorf("error parsing remote URL '%s': %w", rc.Remote, err)
+		return "", fmt.Errorf("error parsing remote URL '%s': %w", remoteURL, err)
 	}
 
 	// e.g. github.com/snarlysodboxer/predictable-yaml-configs/v2.3.0
 	repoPath := strings.TrimPrefix(parsed.Path, "/")
 	repoPath = strings.TrimSuffix(repoPath, ".git")
 
-	return filepath.Join(configDir, CacheDirName, parsed.Host, repoPath, rc.Version), nil
+	return filepath.Join(configDir, CacheDirName, parsed.Host, repoPath, version), nil
 }
 
 // FetchIfNeeded checks the cache and fetches remote configs if not already cached.
 // Returns the path to the cached config directory.
-func FetchIfNeeded(rc *RemoteConfig, configDir string) (string, error) {
-	cachePath, err := rc.CachePath(configDir)
+func FetchIfNeeded(remoteURL, version, configDir string) (string, error) {
+	cachePath, err := CachePath(remoteURL, version, configDir)
 	if err != nil {
 		return "", err
 	}
@@ -95,12 +95,12 @@ func FetchIfNeeded(rc *RemoteConfig, configDir string) (string, error) {
 	}
 
 	// Clean up any stale cache entries for other versions of the same remote
-	if err := cleanOldCacheEntries(rc, configDir); err != nil {
+	if err := cleanOldCacheEntries(remoteURL, version, configDir); err != nil {
 		return "", fmt.Errorf("error cleaning old cache entries: %w", err)
 	}
 
 	// Fetch configs
-	if err := fetchConfigs(rc, cachePath); err != nil {
+	if err := fetchConfigs(remoteURL, version, cachePath); err != nil {
 		return "", err
 	}
 
@@ -108,8 +108,8 @@ func FetchIfNeeded(rc *RemoteConfig, configDir string) (string, error) {
 }
 
 // cleanOldCacheEntries removes cached versions of the same remote repo that don't match the current ref.
-func cleanOldCacheEntries(rc *RemoteConfig, configDir string) error {
-	parsed, err := url.Parse(rc.Remote)
+func cleanOldCacheEntries(remoteURL, version, configDir string) error {
+	parsed, err := url.Parse(remoteURL)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func cleanOldCacheEntries(rc *RemoteConfig, configDir string) error {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() != rc.Version {
+		if entry.IsDir() && entry.Name() != version {
 			if err := os.RemoveAll(filepath.Join(repoDir, entry.Name())); err != nil {
 				return err
 			}
@@ -138,29 +138,29 @@ func cleanOldCacheEntries(rc *RemoteConfig, configDir string) error {
 }
 
 // fetchConfigs tries multiple strategies to download the remote configs.
-func fetchConfigs(rc *RemoteConfig, cachePath string) error {
+func fetchConfigs(remoteURL, version, cachePath string) error {
 	// Strategy 1: unauthenticated tarball download
-	err := fetchTarball(rc, cachePath, "")
+	err := fetchTarball(remoteURL, version, cachePath, "")
 	if err == nil {
 		return nil
 	}
 
 	// Strategy 2: authenticated tarball download using environment token
-	token := getAuthToken(rc.Remote)
+	token := getAuthToken(remoteURL)
 	if token != "" {
-		err = fetchTarball(rc, cachePath, token)
+		err = fetchTarball(remoteURL, version, cachePath, token)
 		if err == nil {
 			return nil
 		}
 	}
 
 	// Strategy 3: fall back to git commands
-	err = fetchViaGit(rc, cachePath)
+	err = fetchViaGit(remoteURL, version, cachePath)
 	if err == nil {
 		return nil
 	}
 
-	return fmt.Errorf("failed to fetch remote configs from '%s' at ref '%s': all fetch strategies failed", rc.Remote, rc.Version)
+	return fmt.Errorf("failed to fetch remote configs from '%s' at ref '%s': all fetch strategies failed", remoteURL, version)
 }
 
 // tarballURL constructs the tarball download URL based on the hosting provider.
@@ -192,8 +192,8 @@ func tarballURL(remoteURL, ref string) (string, error) {
 }
 
 // fetchTarball downloads and extracts a tarball of the remote configs.
-func fetchTarball(rc *RemoteConfig, cachePath, token string) error {
-	tbURL, err := tarballURL(rc.Remote, rc.Version)
+func fetchTarball(remoteURL, version, cachePath, token string) error {
+	tbURL, err := tarballURL(remoteURL, version)
 	if err != nil {
 		return err
 	}
@@ -310,7 +310,7 @@ func getAuthToken(remoteURL string) string {
 }
 
 // fetchViaGit uses git commands to fetch the remote configs as a fallback.
-func fetchViaGit(rc *RemoteConfig, cachePath string) error {
+func fetchViaGit(remoteURL, version, cachePath string) error {
 	if err := os.MkdirAll(cachePath, 0755); err != nil {
 		return fmt.Errorf("error creating cache directory '%s': %w", cachePath, err)
 	}
@@ -323,18 +323,18 @@ func fetchViaGit(rc *RemoteConfig, cachePath string) error {
 	defer os.RemoveAll(tmpDir)
 
 	// Try shallow clone with --branch first (works for tags and branches)
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", rc.Version, rc.Remote, tmpDir)
+	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", version, remoteURL, tmpDir)
 	if _, err := cmd.CombinedOutput(); err != nil {
 		// Fall back to full clone + checkout (needed for commit SHAs)
 		os.RemoveAll(tmpDir)
 		if err := os.MkdirAll(tmpDir, 0755); err != nil {
 			return fmt.Errorf("error recreating temp directory: %w", err)
 		}
-		cmd = exec.Command("git", "clone", rc.Remote, tmpDir)
+		cmd = exec.Command("git", "clone", remoteURL, tmpDir)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git clone failed: %s: %w", string(output), err)
 		}
-		cmd = exec.Command("git", "-C", tmpDir, "checkout", rc.Version)
+		cmd = exec.Command("git", "-C", tmpDir, "checkout", version)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git checkout failed: %s: %w", string(output), err)
 		}

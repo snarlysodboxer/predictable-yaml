@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
@@ -145,7 +146,7 @@ TestCases:
 		}
 
 		// do it
-		got := getConfigNodesByPath(configDirFlag, fmtPath(tmpDir, tc.workDir), tmpDir, filePaths)
+		got := getConfigNodesByPath(configDirFlag, fmtPath(tmpDir, tc.workDir), tmpDir, filePaths, nil, "")
 		if !reflect.DeepEqual(got, expectedConfigNodesByPath) {
 			t.Errorf("Description: %s: cmd.getConfigNodesByPath(...): \n-expected:\n'%#v'\n+got:\n'%#v'\n", tc.note, expectedConfigNodesByPath, got)
 		}
@@ -367,6 +368,25 @@ func TestGetAllFilePaths(t *testing.T) {
 				"kustomize/overlays/fdsa/fdsa.yaml",
 			},
 		},
+		{
+			note: "excludes project config file from directory walk and direct path",
+			mkdirs: []string{
+				"my-project",
+			},
+			mkfiles: map[string][]byte{
+				"my-project/.predictable-yaml.yaml": []byte("version: v1.0.0\n"),
+				"my-project/deployment.yaml":        nil,
+				"my-project/service.yaml":           nil,
+			},
+			filePaths: []string{
+				"my-project",
+				"my-project/.predictable-yaml.yaml",
+			},
+			expectedFilePaths: []string{
+				"my-project/deployment.yaml",
+				"my-project/service.yaml",
+			},
+		},
 	}
 	for _, tc := range testCases {
 		// setup
@@ -388,6 +408,211 @@ func TestGetAllFilePaths(t *testing.T) {
 		if !reflect.DeepEqual(got, expectedFilePaths) {
 			t.Errorf("Description: %s: cmd.getAllFilePaths(...): \n-expected:\n'%#v'\n+got:\n'%#v'\n", tc.note, expectedFilePaths, got)
 		}
+	}
+}
+
+func TestFindProjectConfig(t *testing.T) {
+	type testCase struct {
+		note        string
+		mkdirs      []string
+		mkfiles     map[string][]byte
+		workDir     string
+		expectFound bool
+		expectDir   string // relative to tmpDir
+		checkFields func(*testing.T, *ProjectConfig)
+	}
+
+	testCases := []testCase{
+		{
+			note:   "finds config in working dir",
+			mkdirs: []string{"my-repo"},
+			mkfiles: map[string][]byte{
+				"my-repo/.predictable-yaml.yaml": []byte("remote:\n  version: v1.0.0\n"),
+			},
+			workDir:     "my-repo",
+			expectFound: true,
+			expectDir:   "my-repo",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Remote.Version != "v1.0.0" {
+					t.Errorf("expected version v1.0.0, got %s", cfg.Remote.Version)
+				}
+			},
+		},
+		{
+			note:   "finds config in parent dir",
+			mkdirs: []string{"my-repo/subdir"},
+			mkfiles: map[string][]byte{
+				"my-repo/.predictable-yaml.yaml": []byte("remote:\n  url: https://example.com/repo\n  version: v2.0.0\n"),
+			},
+			workDir:     "my-repo/subdir",
+			expectFound: true,
+			expectDir:   "my-repo",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Remote.Version != "v2.0.0" {
+					t.Errorf("expected version v2.0.0, got %s", cfg.Remote.Version)
+				}
+				if cfg.Remote.URL != "https://example.com/repo" {
+					t.Errorf("expected remote url https://example.com/repo, got %s", cfg.Remote.URL)
+				}
+			},
+		},
+		{
+			note:   "closest config wins",
+			mkdirs: []string{"my-repo/subdir"},
+			mkfiles: map[string][]byte{
+				".predictable-yaml.yaml":         []byte("remote:\n  version: v1.0.0\n"),
+				"my-repo/.predictable-yaml.yaml": []byte("remote:\n  version: v2.0.0\n"),
+			},
+			workDir:     "my-repo/subdir",
+			expectFound: true,
+			expectDir:   "my-repo",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Remote.Version != "v2.0.0" {
+					t.Errorf("expected version v2.0.0 (closer config), got %s", cfg.Remote.Version)
+				}
+			},
+		},
+		{
+			note:        "no config found",
+			mkdirs:      []string{"my-repo"},
+			mkfiles:     map[string][]byte{},
+			workDir:     "my-repo",
+			expectFound: false,
+		},
+		{
+			note:   "finds config in home dir",
+			mkdirs: []string{"my-repo/subdir"},
+			mkfiles: map[string][]byte{
+				".predictable-yaml.yaml": []byte("remote:\n  version: v3.0.0\n"),
+			},
+			workDir:     "my-repo/subdir",
+			expectFound: true,
+			expectDir:   "",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Remote.Version != "v3.0.0" {
+					t.Errorf("expected version v3.0.0, got %s", cfg.Remote.Version)
+				}
+			},
+		},
+		{
+			note:   "config with fixer settings",
+			mkdirs: []string{"my-repo"},
+			mkfiles: map[string][]byte{
+				"my-repo/.predictable-yaml.yaml": []byte("remote:\n  version: v1.0.0\nfixer:\n  indentation-level: 4\n  compact-lists: false\n"),
+			},
+			workDir:     "my-repo",
+			expectFound: true,
+			expectDir:   "my-repo",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Fixer.IndentationLevel == nil || *cfg.Fixer.IndentationLevel != 4 {
+					t.Errorf("expected indentation-level 4, got %v", cfg.Fixer.IndentationLevel)
+				}
+				if cfg.Fixer.CompactLists == nil || *cfg.Fixer.CompactLists != false {
+					t.Errorf("expected compact-lists false, got %v", cfg.Fixer.CompactLists)
+				}
+			},
+		},
+		{
+			note:   "config without optional fields leaves them nil",
+			mkdirs: []string{"my-repo"},
+			mkfiles: map[string][]byte{
+				"my-repo/.predictable-yaml.yaml": []byte("remote:\n  version: v1.0.0\n"),
+			},
+			workDir:     "my-repo",
+			expectFound: true,
+			expectDir:   "my-repo",
+			checkFields: func(t *testing.T, cfg *ProjectConfig) {
+				if cfg.Fixer.IndentationLevel != nil {
+					t.Errorf("expected indentation-level nil, got %v", cfg.Fixer.IndentationLevel)
+				}
+				if cfg.Fixer.CompactLists != nil {
+					t.Errorf("expected compact-lists nil, got %v", cfg.Fixer.CompactLists)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.note, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			err := setupFileSystem(tmpDir, tc.mkdirs, tc.mkfiles)
+			if err != nil {
+				t.Fatalf("setup error: %v", err)
+			}
+
+			cfg, foundDir := findProjectConfig(projectConfigFileName, fmtPath(tmpDir, tc.workDir), tmpDir)
+
+			if tc.expectFound {
+				if cfg == nil {
+					t.Fatalf("expected to find config, got nil")
+				}
+				expectedDir := fmtPath(tmpDir, tc.expectDir)
+				if foundDir != expectedDir {
+					t.Errorf("expected config dir %s, got %s", expectedDir, foundDir)
+				}
+				if tc.checkFields != nil {
+					tc.checkFields(t, cfg)
+				}
+			} else {
+				if cfg != nil {
+					t.Errorf("expected no config, got %+v", cfg)
+				}
+			}
+		})
+	}
+}
+
+func TestParseProjectConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test valid config
+	validPath := filepath.Join(tmpDir, "valid.yaml")
+	if err := os.WriteFile(validPath, []byte("remote:\n  url: https://example.com/repo\n  version: v1.0.0\nfixer:\n  indentation-level: 4\n  compact-lists: false\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parseProjectConfig(validPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Remote.URL != "https://example.com/repo" {
+		t.Errorf("expected remote url https://example.com/repo, got %s", cfg.Remote.URL)
+	}
+	if cfg.Remote.Version != "v1.0.0" {
+		t.Errorf("expected version v1.0.0, got %s", cfg.Remote.Version)
+	}
+	if cfg.Fixer.IndentationLevel == nil || *cfg.Fixer.IndentationLevel != 4 {
+		t.Errorf("expected indentation-level 4, got %v", cfg.Fixer.IndentationLevel)
+	}
+	if cfg.Fixer.CompactLists == nil || *cfg.Fixer.CompactLists != false {
+		t.Errorf("expected compact-lists false, got %v", cfg.Fixer.CompactLists)
+	}
+
+	// Test minimal config (version only)
+	minimalPath := filepath.Join(tmpDir, "minimal.yaml")
+	if err := os.WriteFile(minimalPath, []byte("remote:\n  version: v1.0.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = parseProjectConfig(minimalPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Remote.URL != "" {
+		t.Errorf("expected empty remote url, got %s", cfg.Remote.URL)
+	}
+	if cfg.Remote.Version != "v1.0.0" {
+		t.Errorf("expected version v1.0.0, got %s", cfg.Remote.Version)
+	}
+	if cfg.Fixer.IndentationLevel != nil {
+		t.Errorf("expected nil indentation-level, got %v", cfg.Fixer.IndentationLevel)
+	}
+	if cfg.Fixer.CompactLists != nil {
+		t.Errorf("expected nil compact-lists, got %v", cfg.Fixer.CompactLists)
+	}
+
+	// Test nonexistent file
+	_, err = parseProjectConfig(filepath.Join(tmpDir, "nonexistent.yaml"))
+	if err == nil {
+		t.Error("expected error for nonexistent file")
 	}
 }
 
