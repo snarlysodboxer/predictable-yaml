@@ -1967,6 +1967,37 @@ spec:
           httpGet:
             path: /healthz`,
 		},
+		{
+			note: "null value in trailing-dot ditto sequence",
+			expectedErrs: ValidationErrors{
+				fmt.Errorf("validation error: null value at '.spec.template.testThis[0].containers[0].livenessProbe' — remove it or set a value"),
+			},
+			configYamls: []string{`---
+kind: Deployment # first
+spec:
+  template:  # required
+    spec:  # required
+      containers:
+      - name: cool-app  # first, required
+        livenessProbe:
+          httpGet:
+            path: TODO
+    testThis: []  # ditto=.spec.template.spec.`},
+			fileYaml: `---
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: cool-app
+        livenessProbe:
+          httpGet:
+            path: /healthz
+    testThis:
+    - containers:
+      - name: cool-app
+        livenessProbe:`,
+		},
 	}
 
 	for _, tc := range testCases {

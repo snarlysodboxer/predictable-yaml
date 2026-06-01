@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,7 +44,7 @@ var (
 	validate                bool
 	preserveEmptyLines      bool
 	preserveComments        bool
-	disableAllExperiments   bool
+	disablePostProcessing   bool
 )
 
 // fixCmd represents the fix command
@@ -162,7 +162,7 @@ var fixCmd = &cobra.Command{
 			}
 			fileContents := buf.Bytes()
 
-			if !disableAllExperiments {
+			if !disablePostProcessing {
 				if reduceIndentationBy != 0 {
 					var err error
 					fileContents, err = indentation.FixLists(fileContents, reduceIndentationBy)
@@ -243,21 +243,24 @@ func init() {
 	fixCmd.PersistentFlags().BoolVar(&promptIfLineCountChange, "prompt-if-line-count-change", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().IntVar(&indentationLevel, "indentation-level", 2, "set yaml.v3 indentation spaces")
 	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 2, "reduce indentation level for lists by number")
-	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
+	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "move keys not in the config to the beginning of their map instead of the end")
 	fixCmd.PersistentFlags().BoolVar(&addPreferreds, "add-preferred", false, "add lines marked as preferred when adding missing keys")
 	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
-	fixCmd.PersistentFlags().BoolVar(&preserveEmptyLines, "preserve-empty-lines", true, "attempt to preserve empty lines that are in the original")
-	fixCmd.PersistentFlags().BoolVar(&preserveComments, "preserve-comments", true, "attempt to preserve spaces before comments")
-	fixCmd.PersistentFlags().BoolVarP(&disableAllExperiments, "disable-all-experiments", "d", false, "disable all experimental features. preserve-empty-lines, preserve-comments, and reduce-list-indentation-by.")
+	fixCmd.PersistentFlags().BoolVar(&preserveEmptyLines, "preserve-empty-lines", true, "preserve empty lines from the original file")
+	fixCmd.PersistentFlags().BoolVar(&preserveComments, "preserve-comments", true, "preserve spaces before comments from the original file")
+	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable preserve-empty-lines, preserve-comments, and reduce-list-indentation-by")
+	fixCmd.PersistentFlags().BoolVar(&disablePostProcessing, "disable-all-experiments", false, "deprecated: use --disable-post-processing")
+	_ = fixCmd.PersistentFlags().MarkDeprecated("disable-all-experiments", "use --disable-post-processing instead")
 }
 
-func countLines(str string, r rune) int {
+func countLines(str string, separator rune) int {
 	count := 0
-	for _, c := range str {
-		if c == r {
+	for _, character := range str {
+		if character == separator {
 			count++
 		}
 	}
+
 	return count
 }
 

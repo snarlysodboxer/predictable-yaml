@@ -2,10 +2,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: cool-app
   name: cool-app  # the app name
   namespace: default
+  labels:
+    app: cool-app
 spec:
   replicas: 1
   revisionHistoryLimit: 10
@@ -25,12 +25,12 @@ spec:
         runAsUser: 1001
       # some init containers
       initContainers:
-      - command:
-        - bash
+      - name: wait-for-something
         # our special image comment
         image: kubectl:1.19
         imagePullPolicy: IfNotPresent
-        name: wait-for-something
+        command:
+        - bash
         args:
         - -c
         - |
@@ -44,14 +44,14 @@ spec:
       - name: cool-app
         image: cool-org/cool-app:v0.0.0
         imagePullPolicy: IfNotPresent
+        env:
+        - name: MY_CONFIG_FILE
+          value: config.yaml
         ports:
         - name: server
           containerPort: 8080
         - name: metrics
           containerPort: 9000
-        env:
-        - name: MY_CONFIG_FILE
-          value: config.yaml
         securityContext:
           allowPrivilegeEscalation: false
           procMount: Default
