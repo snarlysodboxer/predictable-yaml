@@ -42,13 +42,10 @@ var (
 	prompt                  bool
 	promptIfLineCountChange bool
 	compactLists            bool
-	reduceIndentationBy     int // deprecated, mapped to compactLists
 	indentationLevel        int
 	unmatchedToBeginning    bool
 	addPreferreds           bool
 	validate                bool
-	preserveEmptyLines      bool
-	preserveComments        bool
 	disablePostProcessing   bool
 )
 
@@ -70,16 +67,7 @@ var fixCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, filePaths []string) {
-		// map deprecated --reduce-list-indentation-by to --compact-lists
-		if cmd.Flags().Changed("reduce-list-indentation-by") {
-			compactLists = reduceIndentationBy != 0
-		}
-
 		// setup
-		configDirFlag := ""
-		if cfgDir != "" {
-			configDirFlag = cfgDir
-		}
 		workDir, err := os.Getwd()
 		if err != nil {
 			log.Fatal(err)
@@ -92,7 +80,39 @@ var fixCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths)
+
+		// Load project config and apply settings for flags not explicitly set
+		projectCfg, projectCfgDir := loadProjectConfig(workDir, homeDir)
+		configDirFlag := resolveConfigDir(projectCfg, projectCfgDir)
+		if projectCfg != nil {
+			f := projectCfg.Fixer
+			if f.IndentationLevel != nil && !cmd.Flags().Changed("indentation-level") {
+				indentationLevel = *f.IndentationLevel
+			}
+			if f.CompactLists != nil && !cmd.Flags().Changed("compact-lists") {
+				compactLists = *f.CompactLists
+			}
+			if f.AddPreferred != nil && !cmd.Flags().Changed("add-preferred") {
+				addPreferreds = *f.AddPreferred
+			}
+			if f.DisablePostProcessing != nil && !cmd.Flags().Changed("disable-post-processing") {
+				disablePostProcessing = *f.DisablePostProcessing
+			}
+			if f.Prompt != nil && !cmd.Flags().Changed("prompt") {
+				prompt = *f.Prompt
+			}
+			if f.PromptIfLineCountChange != nil && !cmd.Flags().Changed("prompt-if-line-count-change") {
+				promptIfLineCountChange = *f.PromptIfLineCountChange
+			}
+			if f.UnmatchedToBeginning != nil && !cmd.Flags().Changed("unmatched-to-beginning") {
+				unmatchedToBeginning = *f.UnmatchedToBeginning
+			}
+			if f.Validate != nil && !cmd.Flags().Changed("validate") {
+				validate = *f.Validate
+			}
+		}
+
+		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths, projectCfg, projectCfgDir)
 
 		success := true
 
@@ -143,7 +163,7 @@ var fixCmd = &cobra.Command{
 				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
 			}
 			commentCount := 0
-			if preserveComments && !disablePostProcessing {
+			if !disablePostProcessing {
 				commentCount = moves.CountComments(oldFileNode)
 			}
 
@@ -183,19 +203,15 @@ var fixCmd = &cobra.Command{
 			fileContents := buf.Bytes()
 
 			if !disablePostProcessing {
-				if preserveComments {
-					fileContents, err = whitespace.PreserveComments(existingFileContents, fileContents)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
+				fileContents, err = whitespace.PreserveComments(existingFileContents, fileContents)
+				if err != nil {
+					log.Println(err)
+					continue
 				}
-				if preserveEmptyLines {
-					fileContents, err = whitespace.PreserveEmptyLines(existingFileContents, fileContents)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
+				fileContents, err = whitespace.PreserveEmptyLines(existingFileContents, fileContents)
+				if err != nil {
+					log.Println(err)
+					continue
 				}
 			}
 
@@ -257,16 +273,10 @@ func init() {
 	fixCmd.PersistentFlags().BoolVar(&promptIfLineCountChange, "prompt-if-line-count-change", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().IntVar(&indentationLevel, "indentation-level", 2, "set yaml.v3 indentation spaces")
 	fixCmd.PersistentFlags().BoolVar(&compactLists, "compact-lists", true, "make '- ' count as part of the indentation for list items")
-	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 0, "deprecated: use --compact-lists instead")
-	_ = fixCmd.PersistentFlags().MarkDeprecated("reduce-list-indentation-by", "use --compact-lists instead")
 	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "move keys not in the config to the beginning of their map instead of the end")
 	fixCmd.PersistentFlags().BoolVar(&addPreferreds, "add-preferred", false, "add lines marked as preferred when adding missing keys")
 	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
-	fixCmd.PersistentFlags().BoolVar(&preserveEmptyLines, "preserve-empty-lines", true, "preserve empty lines from the original file")
-	fixCmd.PersistentFlags().BoolVar(&preserveComments, "preserve-comments", true, "preserve spaces before comments from the original file")
-	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable preserve-empty-lines, preserve-comments, and compact-lists")
-	fixCmd.PersistentFlags().BoolVar(&disablePostProcessing, "disable-all-experiments", false, "deprecated: use --disable-post-processing")
-	_ = fixCmd.PersistentFlags().MarkDeprecated("disable-all-experiments", "use --disable-post-processing instead")
+	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable all post-processing (empty line preservation, comment preservation, compact lists)")
 }
 
 func generateDiff(filePath, oldContent, newContent string) string {

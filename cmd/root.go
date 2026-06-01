@@ -33,17 +33,23 @@ import (
 )
 
 const configDirName = ".predictable-yaml"
+const projectConfigFileName = ".predictable-yaml.yaml"
 
 var (
-	cfgDir        string
-	quiet         bool
-	yamlFileRegex = regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
+	cfgDir         string
+	cfgFile        string
+	cfgFileChanged bool
+	quiet          bool
+	yamlFileRegex  = regexp.MustCompile(`(.*\.yaml$|.*\.yml$)`)
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "predictable-yaml <command>",
 	Short: "Lint or fix YAML key order",
 	Long:  `Compare YAML files to config files.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cfgFileChanged = cmd.Flags().Changed("config-file")
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -56,6 +62,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgDir, "config-dir", "", fmt.Sprintf("directory containing config file(s), (default is $HOME/%s)", configDirName))
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config-file", projectConfigFileName, "project config file path (searched up the directory tree unless explicitly set)")
 	if strings.HasPrefix(cfgDir, "~/") {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
@@ -72,7 +79,7 @@ type configNodesByPath struct {
 }
 
 // getConfigNodesByPath reads files in configDirFlag or found config dir(s), populating []configNodesByPath
-func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []string) []configNodesByPath {
+func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []string, projectCfg *ProjectConfig, projectCfgDir string) []configNodesByPath {
 	var configDirs []string
 	if configDirFlag != "" {
 		configDirs = []string{configDirFlag}
@@ -91,14 +98,49 @@ func getConfigNodesByPath(configDirFlag, workDir, homeDir string, filePaths []st
 	// override more root configs with more specific configs
 	configNodes := compare.ConfigNodes{}
 
-	// First, load remote configs from parent config dirs (as base layer)
+	// First, try loading remote configs from project config file (.predictable-yaml.yaml)
 	hasRemoteConfig := false
-	for _, dir := range configDirs {
-		remoteNodes := loadRemoteConfigNodes(dir)
+	if projectCfg != nil && projectCfg.Remote.Version != "" {
+		remoteURL := projectCfg.Remote.URL
+		if remoteURL == "" {
+			remoteURL = remote.DefaultRemote
+		}
+		// Ensure .predictable-yaml directory exists for caching, relative to the project config file
+		cacheBaseDir := filepath.Join(projectCfgDir, configDirName)
+		if err := os.MkdirAll(cacheBaseDir, 0755); err != nil {
+			log.Fatalf("error creating config directory '%s': %v", cacheBaseDir, err)
+		}
+		cachePath, err := remote.FetchIfNeeded(remoteURL, projectCfg.Remote.Version, cacheBaseDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		checkGitignoreWarnings(cacheBaseDir)
+		remoteNodes := loadRemoteConfigNodesFromCache(cachePath)
 		if remoteNodes != nil {
 			hasRemoteConfig = true
 			for kind, node := range remoteNodes {
 				configNodes[kind] = node
+			}
+		}
+
+		// Warn if .predictable-yaml/.remote also exists
+		for _, dir := range configDirs {
+			remotePath := filepath.Join(dir, remote.RemoteFileName)
+			if _, err := os.Stat(remotePath); err == nil {
+				log.Printf("WARNING: '%s' is deprecated when using '%s'. Remove the .remote file and configure remote/version in %s instead.", remotePath, projectConfigFileName, projectConfigFileName)
+			}
+		}
+	}
+
+	// Fall back to .predictable-yaml/.remote files if no project config remote
+	if !hasRemoteConfig {
+		for _, dir := range configDirs {
+			remoteNodes := loadRemoteConfigNodes(dir)
+			if remoteNodes != nil {
+				hasRemoteConfig = true
+				for kind, node := range remoteNodes {
+					configNodes[kind] = node
+				}
 			}
 		}
 	}
@@ -200,7 +242,7 @@ func loadRemoteConfigNodes(configDir string) compare.ConfigNodes {
 		return nil
 	}
 
-	rc, err := remote.ParseRemoteConfig(remotePath)
+	legacyConfig, err := remote.ParseRemoteConfig(remotePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -208,11 +250,47 @@ func loadRemoteConfigNodes(configDir string) compare.ConfigNodes {
 	// Check gitignore warnings
 	checkGitignoreWarnings(configDir)
 
-	cachePath, err := remote.FetchIfNeeded(rc, configDir)
+	cachePath, err := remote.FetchIfNeeded(legacyConfig.Remote, legacyConfig.Version, configDir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	configNodes := compare.ConfigNodes{}
+	configFiles, err := os.ReadDir(cachePath)
+	if err != nil {
+		log.Fatalf("error reading cached config dir '%s': %v", cachePath, err)
+	}
+	for _, file := range configFiles {
+		if file.IsDir() {
+			continue
+		}
+		if !yamlFileRegex.MatchString(file.Name()) {
+			continue
+		}
+		cNode := &yaml.Node{}
+		path := fmt.Sprintf("%s/%s", cachePath, file.Name())
+		_, err := getYAML(cNode, path)
+		if err != nil {
+			log.Fatalf("error parsing yaml for cached config file: %s: %v", path, err)
+		}
+		configNode := &compare.Node{Node: cNode}
+		compare.WalkConvertYamlNodeToMainNode(configNode)
+		compare.WalkParseLoadConfigComments(configNode)
+		if err := compare.WalkAndValidateConfig(configNode); err != nil {
+			log.Fatalf("error validating cached config file '%s': %v", path, err)
+		}
+		fileConfigs := compare.GetFileConfigs(configNode)
+		if fileConfigs.Kind == "" {
+			log.Fatalf("error determining schema for cached config file: %s: %v", path, err)
+		}
+		configNodes[fileConfigs.Kind] = configNode
+	}
+
+	return configNodes
+}
+
+// loadRemoteConfigNodesFromCache reads config nodes from an already-fetched cache directory.
+func loadRemoteConfigNodesFromCache(cachePath string) compare.ConfigNodes {
 	configNodes := compare.ConfigNodes{}
 	configFiles, err := os.ReadDir(cachePath)
 	if err != nil {
@@ -527,6 +605,9 @@ func getAllFilePaths(filePaths []string) ([]string, error) {
 			return filePaths, err
 		}
 		if !fileStat.IsDir() {
+			if filepath.Base(filePath) == projectConfigFileName {
+				continue
+			}
 			allFilePaths = append(allFilePaths, filePath)
 			continue
 		}
@@ -535,10 +616,14 @@ func getAllFilePaths(filePaths []string) ([]string, error) {
 				return err
 			}
 			if !info.IsDir() && yamlFileRegex.MatchString(info.Name()) {
-				// make sure we're not returning any config files
-				if !strings.Contains(p, configDirName) {
-					allFilePaths = append(allFilePaths, p)
+				// skip config directory files and project config file
+				if strings.Contains(p, configDirName) {
+					return nil
 				}
+				if info.Name() == projectConfigFileName {
+					return nil
+				}
+				allFilePaths = append(allFilePaths, p)
 			}
 			return nil
 		})
@@ -548,4 +633,108 @@ func getAllFilePaths(filePaths []string) ([]string, error) {
 	}
 
 	return allFilePaths, nil
+}
+
+// ProjectConfig represents the contents of a .predictable-yaml.yaml config file.
+type ProjectConfig struct {
+	ConfigDir string              `yaml:"config-dir"`
+	Remote    ProjectRemoteConfig `yaml:"remote"`
+	Fixer     ProjectFixerConfig  `yaml:"fixer"`
+}
+
+// ProjectRemoteConfig holds the remote config source settings.
+type ProjectRemoteConfig struct {
+	URL     string `yaml:"url"`
+	Version string `yaml:"version"`
+}
+
+// ProjectFixerConfig holds fixer default settings.
+type ProjectFixerConfig struct {
+	IndentationLevel        *int  `yaml:"indentation-level"`
+	CompactLists            *bool `yaml:"compact-lists"`
+	AddPreferred            *bool `yaml:"add-preferred"`
+	DisablePostProcessing   *bool `yaml:"disable-post-processing"`
+	Prompt                  *bool `yaml:"prompt"`
+	PromptIfLineCountChange *bool `yaml:"prompt-if-line-count-change"`
+	UnmatchedToBeginning    *bool `yaml:"unmatched-to-beginning"`
+	Validate                *bool `yaml:"validate"`
+}
+
+// resolveConfigDir returns the config directory, preferring CLI flag over project config.
+// Relative paths from the project config are resolved relative to the config file's directory.
+func resolveConfigDir(projectCfg *ProjectConfig, projectCfgDir string) string {
+	if cfgDir != "" {
+		return cfgDir
+	}
+	if projectCfg != nil && projectCfg.ConfigDir != "" {
+		if filepath.IsAbs(projectCfg.ConfigDir) {
+			return projectCfg.ConfigDir
+		}
+
+		return filepath.Join(projectCfgDir, projectCfg.ConfigDir)
+	}
+
+	return ""
+}
+
+// loadProjectConfig returns the project config and the directory it was found in.
+// If --config-file was explicitly set, the value is used as a direct path.
+// Otherwise, the default filename is searched up the directory tree.
+func loadProjectConfig(workDir, homeDir string) (*ProjectConfig, string) {
+	if cfgFileChanged {
+		cfg, err := parseProjectConfig(cfgFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		absPath, err := filepath.Abs(cfgFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return cfg, filepath.Dir(absPath)
+	}
+	cfg, dir := findProjectConfig(cfgFile, workDir, homeDir)
+
+	return cfg, dir
+}
+
+// findProjectConfig searches up the directory tree from dir through homeDir for the named config file.
+// Returns the parsed config and the directory it was found in, or nil if not found.
+func findProjectConfig(fileName, dir, homeDir string) (*ProjectConfig, string) {
+	for {
+		configPath := filepath.Join(dir, fileName)
+		if _, err := os.Stat(configPath); err == nil {
+			cfg, err := parseProjectConfig(configPath)
+			if err != nil {
+				log.Fatalf("error parsing project config '%s': %v", configPath, err)
+			}
+
+			return cfg, dir
+		}
+		if dir == homeDir {
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return nil, ""
+}
+
+// parseProjectConfig reads and parses a .predictable-yaml.yaml file.
+func parseProjectConfig(path string) (*ProjectConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("error reading project config '%s': %w", path, err)
+	}
+
+	cfg := &ProjectConfig{}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("error parsing project config '%s': %w", path, err)
+	}
+
+	return cfg, nil
 }

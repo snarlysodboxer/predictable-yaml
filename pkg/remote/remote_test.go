@@ -18,7 +18,7 @@ func TestParseRemoteConfig(t *testing.T) {
 	type testCase struct {
 		note        string
 		content     string
-		expected    *RemoteConfig
+		expected    *LegacyRemoteConfig
 		expectError bool
 	}
 
@@ -28,7 +28,7 @@ func TestParseRemoteConfig(t *testing.T) {
 			content: `
 version: v2.3.0
 `,
-			expected: &RemoteConfig{
+			expected: &LegacyRemoteConfig{
 				Remote:  DefaultRemote,
 				Version: "v2.3.0",
 			},
@@ -39,7 +39,7 @@ version: v2.3.0
 remote: https://github.com/my-org/my-configs
 version: v1.0.0
 `,
-			expected: &RemoteConfig{
+			expected: &LegacyRemoteConfig{
 				Remote:  "https://github.com/my-org/my-configs",
 				Version: "v1.0.0",
 			},
@@ -49,7 +49,7 @@ version: v1.0.0
 			content: `
 version: abc123def456
 `,
-			expected: &RemoteConfig{
+			expected: &LegacyRemoteConfig{
 				Remote:  DefaultRemote,
 				Version: "abc123def456",
 			},
@@ -60,7 +60,7 @@ version: abc123def456
 remote: https://gitlab.com/my-org/my-configs
 version: abc123def456
 `,
-			expected: &RemoteConfig{
+			expected: &LegacyRemoteConfig{
 				Remote:  "https://gitlab.com/my-org/my-configs",
 				Version: "abc123def456",
 			},
@@ -101,52 +101,45 @@ remote: https://github.com/my-org/my-configs
 func TestCachePath(t *testing.T) {
 	type testCase struct {
 		note      string
-		rc        *RemoteConfig
+		remoteURL string
+		version   string
 		configDir string
 		expected  string
 	}
 
 	testCases := []testCase{
 		{
-			note: "github with version",
-			rc: &RemoteConfig{
-				Remote:  "https://github.com/snarlysodboxer/predictable-yaml-configs",
-				Version: "v2.3.0",
-			},
+			note:      "github with version",
+			remoteURL: "https://github.com/snarlysodboxer/predictable-yaml-configs",
+			version:   "v2.3.0",
 			configDir: "/repo/.predictable-yaml",
 			expected:  "/repo/.predictable-yaml/.cache/github.com/snarlysodboxer/predictable-yaml-configs/v2.3.0",
 		},
 		{
-			note: "github with commit SHA as version",
-			rc: &RemoteConfig{
-				Remote:  "https://github.com/my-org/configs",
-				Version: "abc123def456",
-			},
+			note:      "github with commit SHA as version",
+			remoteURL: "https://github.com/my-org/configs",
+			version:   "abc123def456",
 			configDir: "/repo/.predictable-yaml",
 			expected:  "/repo/.predictable-yaml/.cache/github.com/my-org/configs/abc123def456",
 		},
 		{
-			note: "gitlab",
-			rc: &RemoteConfig{
-				Remote:  "https://gitlab.com/my-org/configs",
-				Version: "v1.0.0",
-			},
+			note:      "gitlab",
+			remoteURL: "https://gitlab.com/my-org/configs",
+			version:   "v1.0.0",
 			configDir: "/repo/.predictable-yaml",
 			expected:  "/repo/.predictable-yaml/.cache/gitlab.com/my-org/configs/v1.0.0",
 		},
 		{
-			note: "remote with .git suffix",
-			rc: &RemoteConfig{
-				Remote:  "https://github.com/my-org/configs.git",
-				Version: "v1.0.0",
-			},
+			note:      "remote with .git suffix",
+			remoteURL: "https://github.com/my-org/configs.git",
+			version:   "v1.0.0",
 			configDir: "/repo/.predictable-yaml",
 			expected:  "/repo/.predictable-yaml/.cache/github.com/my-org/configs/v1.0.0",
 		},
 	}
 
 	for _, tc := range testCases {
-		got, err := tc.rc.CachePath(tc.configDir)
+		got, err := CachePath(tc.remoteURL, tc.version, tc.configDir)
 		if err != nil {
 			t.Errorf("Description: %s: CachePath: unexpected error: %v", tc.note, err)
 			continue
@@ -278,13 +271,11 @@ func TestFetchIfNeeded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc := &RemoteConfig{
-		Remote:  fmt.Sprintf("%s/my-org/configs", server.URL),
-		Version: "v1.0.0",
-	}
+	remoteURL := fmt.Sprintf("%s/my-org/configs", server.URL)
+	version := "v1.0.0"
 
 	// First fetch — should download
-	cachePath, err := FetchIfNeeded(rc, configDir)
+	cachePath, err := FetchIfNeeded(remoteURL, version, configDir)
 	if err != nil {
 		t.Fatalf("FetchIfNeeded: unexpected error: %v", err)
 	}
@@ -301,7 +292,7 @@ func TestFetchIfNeeded(t *testing.T) {
 	}
 
 	// Second fetch — should use cache, no new request
-	cachePath2, err := FetchIfNeeded(rc, configDir)
+	cachePath2, err := FetchIfNeeded(remoteURL, version, configDir)
 	if err != nil {
 		t.Fatalf("FetchIfNeeded (cached): unexpected error: %v", err)
 	}
@@ -317,10 +308,8 @@ func TestCleanOldCacheEntries(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, ".predictable-yaml")
 
-	rc := &RemoteConfig{
-		Remote:  "https://github.com/my-org/configs",
-		Version: "v2.0.0",
-	}
+	remoteURL := "https://github.com/my-org/configs"
+	version := "v2.0.0"
 
 	// Create old cache entry
 	oldCachePath := filepath.Join(configDir, CacheDirName, "github.com", "my-org", "configs", "v1.0.0")
@@ -337,7 +326,7 @@ func TestCleanOldCacheEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cleanOldCacheEntries(rc, configDir)
+	err := cleanOldCacheEntries(remoteURL, version, configDir)
 	if err != nil {
 		t.Fatalf("cleanOldCacheEntries: unexpected error: %v", err)
 	}
@@ -395,12 +384,10 @@ func TestFetchIfNeededNetworkError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc := &RemoteConfig{
-		Remote:  fmt.Sprintf("%s/my-org/configs", server.URL),
-		Version: "v1.0.0",
-	}
+	remoteURL := fmt.Sprintf("%s/my-org/configs", server.URL)
+	version := "v1.0.0"
 
-	_, err := FetchIfNeeded(rc, configDir)
+	_, err := FetchIfNeeded(remoteURL, version, configDir)
 	if err == nil {
 		t.Fatalf("FetchIfNeeded: expected error for failed fetch, got nil")
 	}

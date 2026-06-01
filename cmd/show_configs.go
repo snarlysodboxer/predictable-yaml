@@ -71,13 +71,13 @@ var showConfigsCmd = &cobra.Command{
 			// Check for remote config
 			remotePath := filepath.Join(dir, remote.RemoteFileName)
 			if _, statErr := os.Stat(remotePath); statErr == nil {
-				rc, parseErr := remote.ParseRemoteConfig(remotePath)
+				legacyConfig, parseErr := remote.ParseRemoteConfig(remotePath)
 				if parseErr != nil {
 					fmt.Printf("  Remote config: ERROR: %v\n", parseErr)
 				} else {
 					hasRemoteConfig = true
-					fmt.Printf("  Remote: %s @ %s\n", rc.Remote, rc.Version)
-					cachePath, cacheErr := rc.CachePath(dir)
+					fmt.Printf("  Remote: %s @ %s\n", legacyConfig.Remote, legacyConfig.Version)
+					cachePath, cacheErr := remote.CachePath(legacyConfig.Remote, legacyConfig.Version, dir)
 					if cacheErr == nil {
 						if _, statErr := os.Stat(cachePath); statErr == nil {
 							fmt.Printf("  Cache: %s (cached)\n", cachePath)
@@ -107,9 +107,9 @@ var showConfigsCmd = &cobra.Command{
 
 				remotePath := filepath.Join(dir, remote.RemoteFileName)
 				if _, statErr := os.Stat(remotePath); statErr == nil {
-					rc, parseErr := remote.ParseRemoteConfig(remotePath)
+					legacyConfig, parseErr := remote.ParseRemoteConfig(remotePath)
 					if parseErr == nil {
-						fmt.Printf("  Remote: %s @ %s\n", rc.Remote, rc.Version)
+						fmt.Printf("  Remote: %s @ %s\n", legacyConfig.Remote, legacyConfig.Version)
 					}
 				}
 

@@ -47,10 +47,6 @@ var lintCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, filePaths []string) {
 		// setup
-		configDirFlag := ""
-		if cfgDir != "" {
-			configDirFlag = cfgDir
-		}
 		workDir, err := os.Getwd()
 		if err != nil {
 			log.Fatal(err)
@@ -63,7 +59,9 @@ var lintCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths)
+		projectCfg, projectCfgDir := loadProjectConfig(workDir, homeDir)
+		configDirFlag := resolveConfigDir(projectCfg, projectCfgDir)
+		cfgNodesByPaths := getConfigNodesByPath(configDirFlag, workDir, homeDir, allFilePaths, projectCfg, projectCfgDir)
 
 		success := true
 		for _, filePath := range allFilePaths {
