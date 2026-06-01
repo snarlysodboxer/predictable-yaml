@@ -49,13 +49,23 @@ type FileConfigs struct {
 	IgnoreRequireds bool   // target files only
 }
 
+// AddedField represents a required field that was added during sorting.
+type AddedField struct {
+	Path string // parent path, e.g. ".metadata.labels"
+	Key  string // key name, e.g. "app.kubernetes.io/name"
+}
+
+func (f AddedField) String() string {
+	return f.Path + "." + f.Key
+}
+
 // SortConfigs represent various configs for a sorting operation
 type SortConfigs struct {
 	ConfigNodes          ConfigNodes
 	FileConfigs          FileConfigs
 	UnmatchedToBeginning bool
 	AddPreferreds        bool
-	AddedFields          *[]string
+	AddedFields          *[]AddedField
 }
 
 // KeyValuePair represent a scalar key node, and it's related value node
@@ -467,8 +477,10 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 
 			// track added fields
 			if sortConfs.AddedFields != nil {
-				path := GetReferencePath(fileNode, 0, "") + "." + configPair.Key
-				*sortConfs.AddedFields = append(*sortConfs.AddedFields, path)
+				*sortConfs.AddedFields = append(*sortConfs.AddedFields, AddedField{
+					Path: GetReferencePath(fileNode, 0, ""),
+					Key:  configPair.Key,
+				})
 			}
 
 			// set the style to match the parent. this prevents

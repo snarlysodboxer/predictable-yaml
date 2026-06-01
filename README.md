@@ -125,10 +125,10 @@ Pass directory paths to search recursively for YAML files, file paths to check s
 
 ## Fixing
 
-The fixer reorders keys to match the config schema. By default, it shows a diff and prompts for confirmation before writing changes.
+The fixer reorders keys to match the config schema. By default, it shows a structural summary of changes and prompts for confirmation before writing.
 
 ```shell
-# Fix with diff + prompt (default)
+# Fix with summary + prompt (default)
 predictable-yaml fix my-dir/
 
 # Fix without prompting
@@ -144,9 +144,30 @@ predictable-yaml fix --indentation-level 4 --reduce-list-indentation-by 0 my-dir
 predictable-yaml fix -d my-dir/
 ```
 
+### Interactive Prompt
+
+The prompt shows a structural summary of changes, then offers options to apply, skip, or view a full diff (built-in or external tool).
+
+### External Diff Tool
+
+The prompt's `e` option opens the before/after versions in an external diff tool. The tool is selected in this order:
+
+1. **`PREDICTABLE_YAML_DIFF`** environment variable (tool-specific, highest priority)
+2. **`KUBECTL_EXTERNAL_DIFF`** environment variable (many Kubernetes users already have this set)
+3. **`DIFFTOOL`** environment variable (generic fallback)
+4. **Auto-detection** - if no env var is set, the first available tool is used: `nvim -d`, `vimdiff`, `difft` (difftastic), `delta`, `code --diff --wait`, `meld`, `colordiff -u`
+
+```shell
+# Examples
+export PREDICTABLE_YAML_DIFF="nvim -d"
+export PREDICTABLE_YAML_DIFF="code --diff --wait"
+export PREDICTABLE_YAML_DIFF="difft"
+```
+
 ### Fixer Features
 
 - **Key reordering** - Reorders keys to match the config schema. Always produces valid YAML.
+- **Structural summary** - Shows a YAML-like summary of what moved and what was added, with comment preservation status.
 - **Preserve empty lines** - Associates empty lines with the YAML key following them and reinserts them after reordering. Reinserts trailing empty lines if present in the original. *(enabled by default, disable with `--preserve-empty-lines=false`)*
 - **Preserve comments** - Replaces comment spacing with the original versions after reordering. *(enabled by default, disable with `--preserve-comments=false`)*
 - **Reduce list indentation** - Adjusts list item indentation so `-` is even with the parent key instead of indented. *(enabled by default, disable with `--reduce-list-indentation-by 0`)*
@@ -157,9 +178,19 @@ predictable-yaml fix -d my-dir/
 ### Notes
 
 - Recommend starting with a clean git tree so changes can easily be reviewed or undone.
-- Whitespace preservation is not perfect in every circumstance, as it involves inferring intent from empty lines. Disable with `--preserve-empty-lines=false` if results are unexpected.
 - Comment preservation may not work well when the fixer also changes indentation from the original. Set `--indentation-level` and `--reduce-list-indentation-by` to match your project's style first.
-- Comment support is limited by Go's yaml.v3 library. It is possible for comments to be lost if they are not header, footer, or line comments (empty lines around a comment define these).
+
+### Known Limitations
+
+**Comment handling:**
+- Comment support is limited by Go's yaml.v3 library. yaml.v3 only tracks three types of comments per node: HeadComment (above), LineComment (inline), and FootComment (below). Comments that don't clearly belong to a node may be lost or moved during parsing.
+- Comments above `---` document start markers: yaml.v3 attaches these as a HeadComment on the first key in the document. The comment content is preserved, but custom spacing before it may not be restored. A warning is logged when this happens.
+- Head comment indentation: yaml.v3 normalizes head comment indentation during parsing. The fixer restores original indentation in most cases by searching for comment text in surrounding nodes, but there may be edge cases where the comment gets re-indented to match the key's indentation level.
+
+**Empty line handling:**
+- Whitespace preservation is not perfect in every circumstance, as it involves inferring intent from empty lines. Disable with `--preserve-empty-lines=false` if results are unexpected.
+- Empty lines are associated with the YAML node on the line below them. When keys are reordered, the empty line moves with the key it was above. This is usually the desired behavior, but may occasionally produce unexpected results.
+- Multiple consecutive empty lines (2+) are preserved correctly.
 
 ## Writing Config Files
 

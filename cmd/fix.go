@@ -22,12 +22,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/kylelemons/godebug/diff"
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/indentation"
+	"github.com/snarlysodboxer/predictable-yaml/pkg/moves"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/whitespace"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -111,7 +116,7 @@ var fixCmd = &cobra.Command{
 			}
 
 			// do it
-			addedFields := []string{}
+			addedFields := []compare.AddedField{}
 			sortConfigs := compare.SortConfigs{
 				ConfigNodes:          configNodes,
 				FileConfigs:          fileConfigs,
@@ -134,6 +139,16 @@ var fixCmd = &cobra.Command{
 					continue
 				}
 			}
+
+			// parse a separate copy for move summary comparison
+			oldFNode := &yaml.Node{}
+			_, err = getYAML(oldFNode, filePath)
+			if err != nil {
+				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
+			}
+			oldFileNode := &compare.Node{Node: oldFNode}
+			compare.WalkConvertYamlNodeToMainNode(oldFileNode)
+			commentCount := moves.CountComments(oldFileNode)
 
 			errs := compare.WalkAndSort(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
 			if len(errs) != 0 {
@@ -202,8 +217,13 @@ var fixCmd = &cobra.Command{
 				}
 				doFix := true
 				if shouldPrompt {
-					fmt.Printf("\n%s\n", diff.Diff(existingFileContentsStr, fileContentsStr))
-					doFix = promptForConfirmation(fmt.Sprintf("Do you want to write these changes to '%s'?", filePath))
+					// show structural summary
+					descriptions := moves.ComputeDescriptions(oldFileNode, fileNode)
+					summary := moves.FormatSummary(filePath, descriptions, addedFields, commentCount)
+					if summary != "" {
+						fmt.Printf("\n%s\n", summary)
+					}
+					doFix = promptForConfirmation(filePath, existingFileContentsStr, fileContentsStr)
 				}
 
 				if !doFix {
@@ -221,9 +241,6 @@ var fixCmd = &cobra.Command{
 					continue
 				}
 				log.Printf("File '%s' has been fixed!", filePath)
-				if len(addedFields) > 0 {
-					log.Printf("WARNING: added required fields to '%s': %s", filePath, strings.Join(addedFields, ", "))
-				}
 			}
 		}
 
@@ -253,6 +270,142 @@ func init() {
 	_ = fixCmd.PersistentFlags().MarkDeprecated("disable-all-experiments", "use --disable-post-processing instead")
 }
 
+func generateDiff(filePath, oldContent, newContent string) string {
+	edits := myers.ComputeEdits(span.URIFromPath(filePath), oldContent, newContent)
+	unified := gotextdiff.ToUnified("a/"+filepath.Base(filePath), "b/"+filepath.Base(filePath), oldContent, edits)
+	text := fmt.Sprint(unified)
+
+	if !moves.IsTerminal() {
+		return text
+	}
+
+	return colorizeDiff(text)
+}
+
+func colorizeDiff(text string) string {
+	const (
+		reset = "\033[0m"
+		red   = "\033[31m"
+		green = "\033[32m"
+		cyan  = "\033[36m"
+		bold  = "\033[1m"
+	)
+
+	var stringBuilder strings.Builder
+	for _, line := range strings.Split(text, "\n") {
+		switch {
+		case strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
+			stringBuilder.WriteString(bold + line + reset)
+		case strings.HasPrefix(line, "@@"):
+			stringBuilder.WriteString(cyan + line + reset)
+		case strings.HasPrefix(line, "-"):
+			stringBuilder.WriteString(red + line + reset)
+		case strings.HasPrefix(line, "+"):
+			stringBuilder.WriteString(green + line + reset)
+		default:
+			stringBuilder.WriteString(line)
+		}
+		stringBuilder.WriteString("\n")
+	}
+
+	return stringBuilder.String()
+}
+
+// getExternalDiffTool returns the configured external diff tool command,
+// checking environment variables first, then falling back to auto-detection
+// of common diff tools on the system.
+func getExternalDiffTool() string {
+	for _, envVar := range []string{"PREDICTABLE_YAML_DIFF", "KUBECTL_EXTERNAL_DIFF", "DIFFTOOL"} {
+		if val := os.Getenv(envVar); val != "" {
+			return val
+		}
+	}
+
+	return detectDiffTool()
+}
+
+// detectDiffTool checks for common diff tools in order of preference.
+func detectDiffTool() string {
+	candidates := []struct {
+		bin  string   // binary to look for in PATH
+		args []string // full command to use if found
+	}{
+		{"nvim", []string{"nvim", "-d"}},
+		{"vimdiff", []string{"vimdiff"}},
+		{"difft", []string{"difft"}},
+		{"delta", []string{"delta"}},
+		{"code", []string{"code", "--diff", "--wait"}},
+		{"meld", []string{"meld"}},
+		{"colordiff", []string{"colordiff", "-u"}},
+	}
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.bin); err == nil {
+			return strings.Join(c.args, " ")
+		}
+	}
+
+	return ""
+}
+
+// showExternalDiff writes old/new content to temp files and invokes the
+// configured external diff tool.
+func showExternalDiff(filePath, oldContent, newContent string) error {
+	tool := getExternalDiffTool()
+	if tool == "" {
+		return fmt.Errorf("no external diff tool configured")
+	}
+
+	baseName := filepath.Base(filePath)
+
+	oldFile, err := os.CreateTemp("", "predictable-yaml-before-*-"+baseName)
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	defer os.Remove(oldFile.Name())
+
+	newFile, err := os.CreateTemp("", "predictable-yaml-after-*-"+baseName)
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	defer os.Remove(newFile.Name())
+
+	if _, err := oldFile.WriteString(oldContent); err != nil {
+		return fmt.Errorf("writing old content: %w", err)
+	}
+	oldFile.Close()
+	if err := os.Chmod(oldFile.Name(), 0444); err != nil {
+		return fmt.Errorf("setting temp file read-only: %w", err)
+	}
+
+	if _, err := newFile.WriteString(newContent); err != nil {
+		return fmt.Errorf("writing new content: %w", err)
+	}
+	newFile.Close()
+	if err := os.Chmod(newFile.Name(), 0444); err != nil {
+		return fmt.Errorf("setting temp file read-only: %w", err)
+	}
+
+	// Split command, respecting that the tool may have arguments
+	parts := strings.Fields(tool)
+	args := append(parts[1:], oldFile.Name(), newFile.Name())
+
+	cmd := exec.Command(parts[0], args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err = cmd.Run()
+	if err != nil {
+		// Exit code 1 is normal for diff tools (means differences found)
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil
+		}
+		return fmt.Errorf("running external diff tool: %w", err)
+	}
+
+	return nil
+}
+
 func countLines(str string, separator rune) int {
 	count := 0
 	for _, character := range str {
@@ -264,10 +417,15 @@ func countLines(str string, separator rune) int {
 	return count
 }
 
-func promptForConfirmation(str string) bool {
+func promptForConfirmation(filePath, oldContent, newContent string) bool {
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Printf("%s [y/n]: ", str)
+		fmt.Printf("Do you want to write these changes to '%s'?\n", filePath)
+		fmt.Println("  y = yes, apply changes")
+		fmt.Println("  n = no, skip this file")
+		fmt.Println("  d = show built-in diff")
+		fmt.Println("  e = show diff in external tool")
+		fmt.Print("[y/n/d/e]: ")
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
@@ -275,12 +433,26 @@ func promptForConfirmation(str string) bool {
 		}
 
 		response = strings.ToLower(strings.TrimSpace(response))
-		fmt.Println(response)
 
-		if response == "y" || response == "yes" {
+		switch response {
+		case "y", "yes":
 			return true
-		} else if response == "n" || response == "no" {
+		case "n", "no":
 			return false
+		case "d":
+			fmt.Printf("\n%s\n", generateDiff(filePath, oldContent, newContent))
+		case "e":
+			tool := getExternalDiffTool()
+			if tool == "" {
+				fmt.Println("No external diff tool configured. Set one of these environment variables:")
+				fmt.Println("  PREDICTABLE_YAML_DIFF=\"vimdiff\"")
+				fmt.Println("  KUBECTL_EXTERNAL_DIFF=\"code --diff --wait\"")
+				fmt.Println("  DIFFTOOL=\"difftastic\"")
+			} else {
+				if err := showExternalDiff(filePath, oldContent, newContent); err != nil {
+					log.Printf("external diff error: %v", err)
+				}
+			}
 		}
 	}
 }

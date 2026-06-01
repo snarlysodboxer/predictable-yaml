@@ -3,7 +3,7 @@ module github.com/snarlysodboxer/predictable-yaml
 go 1.23
 
 require (
-	github.com/kylelemons/godebug v1.1.0
+	github.com/hexops/gotextdiff v1.0.3
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )
