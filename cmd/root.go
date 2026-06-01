@@ -422,6 +422,19 @@ func getYAML(node *yaml.Node, file string) ([]byte, error) {
 	return data, nil
 }
 
+// parseNodeFromBytes unmarshals YAML bytes into a compare.Node tree.
+func parseNodeFromBytes(data []byte) (*compare.Node, error) {
+	yamlNode := &yaml.Node{}
+	err := yaml.Unmarshal(data, yamlNode)
+	if err != nil {
+		return nil, err
+	}
+	node := &compare.Node{Node: yamlNode}
+	compare.WalkConvertYamlNodeToMainNode(node)
+
+	return node, nil
+}
+
 // filterEmptyConfigDirs removes config dirs that contain no .remote file and no YAML files.
 func filterEmptyConfigDirs(configDirs []string) []string {
 	var filtered []string

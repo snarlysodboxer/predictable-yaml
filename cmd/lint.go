@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,7 @@ import (
 	"os"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
+	"github.com/snarlysodboxer/predictable-yaml/pkg/moves"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -67,7 +68,7 @@ var lintCmd = &cobra.Command{
 		success := true
 		for _, filePath := range allFilePaths {
 			fNode := &yaml.Node{}
-			_, err := getYAML(fNode, filePath)
+			fileContents, err := getYAML(fNode, filePath)
 			if err != nil {
 				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
 			}
@@ -89,22 +90,43 @@ var lintCmd = &cobra.Command{
 				continue
 			}
 
-			// do it
+			// pre-flight null value check
+			addedFields := []compare.AddedField{}
 			sortConfigs := compare.SortConfigs{
 				ConfigNodes: configNodes,
 				FileConfigs: fileConfigs,
+				AddedFields: &addedFields,
 			}
-			errs := compare.WalkFindNullValues(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
-			if len(errs) == 0 {
-				errs = compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
-			}
-			if len(errs) != 0 {
+			nullErrs := compare.WalkFindNullValues(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			if len(nullErrs) != 0 {
 				success = false
-				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
+				log.Printf("File '%s' has validation errors:\n%v", filePath, compare.GetValidationErrorStrings(nullErrs))
 				continue
 			}
-			if !quiet {
-				log.Printf("File '%s' is valid!", filePath)
+
+			// sort to detect what would change
+			errs, changed := compare.WalkAndSort(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			if len(errs) != 0 {
+				success = false
+				log.Printf("File '%s' has errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
+				continue
+			}
+
+			if changed || len(addedFields) > 0 {
+				success = false
+
+				// unmarshal a second copy from the bytes we already have
+				oldFileNode, err := parseNodeFromBytes(fileContents)
+				if err != nil {
+					log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
+				}
+
+				descriptions := moves.ComputeDescriptions(oldFileNode, fileNode)
+				summary := moves.FormatSummary(filePath, descriptions, addedFields, 0)
+				if summary == "" {
+					summary = fmt.Sprintf("File: %s\n\n  Changes:\n    (keys reordered)\n", filePath)
+				}
+				fmt.Print("\n" + summary + "\n")
 			}
 		}
 

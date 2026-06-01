@@ -132,28 +132,25 @@ var fixCmd = &cobra.Command{
 				continue
 			}
 
-			// only sort if validation fails
-			if validate {
-				errs := compare.WalkAndCompare(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
-				if len(errs) == 0 {
-					continue
-				}
-			}
-
 			// parse a separate copy for move summary comparison
-			oldFNode := &yaml.Node{}
-			_, err = getYAML(oldFNode, filePath)
+			oldFileNode, err := parseNodeFromBytes(existingFileContents)
 			if err != nil {
 				log.Fatalf("error parsing yaml for target file: %s: %v", filePath, err)
 			}
-			oldFileNode := &compare.Node{Node: oldFNode}
-			compare.WalkConvertYamlNodeToMainNode(oldFileNode)
-			commentCount := moves.CountComments(oldFileNode)
+			commentCount := 0
+			if preserveComments && !disablePostProcessing {
+				commentCount = moves.CountComments(oldFileNode)
+			}
 
-			errs := compare.WalkAndSort(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
+			errs, changed := compare.WalkAndSort(configNode, fileNode, sortConfigs, compare.ValidationErrors{})
 			if len(errs) != 0 {
 				success = false
 				log.Printf("File '%s' has fix errors:\n%v", filePath, compare.GetValidationErrorStrings(errs))
+				continue
+			}
+
+			// skip if nothing changed (prevents whitespace-only changes from encoding)
+			if validate && !changed && len(addedFields) == 0 {
 				continue
 			}
 
@@ -387,6 +384,9 @@ func showExternalDiff(filePath, oldContent, newContent string) error {
 
 	// Split command, respecting that the tool may have arguments
 	parts := strings.Fields(tool)
+	if len(parts) == 0 {
+		return fmt.Errorf("external diff tool command is empty")
+	}
 	args := append(parts[1:], oldFile.Name(), newFile.Name())
 
 	cmd := exec.Command(parts[0], args...)
@@ -447,7 +447,7 @@ func promptForConfirmation(filePath, oldContent, newContent string) bool {
 				fmt.Println("No external diff tool configured. Set one of these environment variables:")
 				fmt.Println("  PREDICTABLE_YAML_DIFF=\"vimdiff\"")
 				fmt.Println("  KUBECTL_EXTERNAL_DIFF=\"code --diff --wait\"")
-				fmt.Println("  DIFFTOOL=\"difftastic\"")
+				fmt.Println("  DIFFTOOL=\"difft\"")
 			} else {
 				if err := showExternalDiff(filePath, oldContent, newContent); err != nil {
 					log.Printf("external diff error: %v", err)

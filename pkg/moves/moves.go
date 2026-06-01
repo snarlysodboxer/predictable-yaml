@@ -47,7 +47,7 @@ func (k KeyInfo) valueDisplay() string {
 type MoveDescription struct {
 	Path   string // e.g., "metadata", "spec.template.spec.containers[0]"
 	Keys   []KeyInfo
-	Action string // e.g., "moved before labels", "moved to top"
+	Action string // e.g., "move before labels", "move to top"
 }
 
 // ComputeDescriptions compares old and new YAML node trees and returns
@@ -190,9 +190,9 @@ func findMoves(oldPairs, newPairs []compare.KeyValuePair) []moveGroup {
 
 		action := ""
 		if sharedKeyEntry.newIdx == 0 {
-			action = "moved to top"
+			action = "move to top"
 		} else {
-			action = "moved up"
+			action = "move up"
 		}
 
 		pair := newPairMap[sharedKeyEntry.key]
@@ -372,7 +372,7 @@ func renderTree(stringBuilder *strings.Builder, node *summaryNode, indent string
 
 	// Render added fields at this level
 	for _, key := range node.added {
-		comment := "# added"
+		comment := "# add"
 		if color {
 			comment = colorYellow + comment + colorReset
 		}

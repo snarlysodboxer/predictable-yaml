@@ -79,11 +79,11 @@ metadata:
   namespace: default
   labels:
     app: test`,
-			wantDescs:   2, // name moved to top, namespace moved up
+			wantDescs:   2, // name move to top, namespace move up
 			wantContain: "name",
 		},
 		{
-			name: "key moved to top",
+			name: "key move to top",
 			oldYAML: `metadata:
   labels:
     app: test
@@ -95,7 +95,7 @@ metadata:
     app: test
   namespace: default`,
 			wantDescs:   1,
-			wantContain: "moved to top",
+			wantContain: "move to top",
 		},
 		{
 			name: "nested key reorder",
@@ -119,7 +119,7 @@ spec:
         image: img
         ports:
         - containerPort: 8080`,
-			wantDescs:   2, // name moved to top, image moved up
+			wantDescs:   2, // name move to top, image move up
 			wantContain: "name",
 		},
 	}
@@ -161,8 +161,8 @@ metadata:
 
 func TestFormatSummary(t *testing.T) {
 	descs := []MoveDescription{
-		{Path: "metadata", Keys: []KeyInfo{scalarKey("name", "cool-app"), scalarKey("namespace", "default")}, Action: "moved up"},
-		{Path: "spec.template.spec.containers[0]", Keys: []KeyInfo{scalarKey("name", "app")}, Action: "moved to top"},
+		{Path: "metadata", Keys: []KeyInfo{scalarKey("name", "cool-app"), scalarKey("namespace", "default")}, Action: "move up"},
+		{Path: "spec.template.spec.containers[0]", Keys: []KeyInfo{scalarKey("name", "app")}, Action: "move to top"},
 	}
 	added := []compare.AddedField{{Path: ".spec.template.spec.containers[0]", Key: "imagePullPolicy"}}
 
@@ -174,13 +174,13 @@ func TestFormatSummary(t *testing.T) {
 	if !strings.Contains(summary, "name: cool-app") {
 		t.Errorf("summary missing key with value:\n%s", summary)
 	}
-	if !strings.Contains(summary, "# moved up") {
+	if !strings.Contains(summary, "# move up") {
 		t.Errorf("summary missing move action as comment:\n%s", summary)
 	}
-	if !strings.Contains(summary, "# moved to top") {
-		t.Errorf("summary missing moved to top as comment:\n%s", summary)
+	if !strings.Contains(summary, "# move to top") {
+		t.Errorf("summary missing move to top as comment:\n%s", summary)
 	}
-	if !strings.Contains(summary, "imagePullPolicy: TODO  # added") {
+	if !strings.Contains(summary, "imagePullPolicy: TODO  # add") {
 		t.Errorf("summary missing added field:\n%s", summary)
 	}
 	if !strings.Contains(summary, "all 3 comments preserved") {
@@ -203,8 +203,8 @@ func TestFormatSummary(t *testing.T) {
 func TestFormatSummaryGrouping(t *testing.T) {
 	// Two moves at the same path should be grouped under one heading
 	descs := []MoveDescription{
-		{Path: "metadata", Keys: []KeyInfo{scalarKey("name", "test")}, Action: "moved to top"},
-		{Path: "metadata", Keys: []KeyInfo{scalarKey("namespace", "default")}, Action: "moved up"},
+		{Path: "metadata", Keys: []KeyInfo{scalarKey("name", "test")}, Action: "move to top"},
+		{Path: "metadata", Keys: []KeyInfo{scalarKey("namespace", "default")}, Action: "move up"},
 	}
 
 	summary := FormatSummary("test.yaml", descs, nil, 0)
@@ -213,10 +213,10 @@ func TestFormatSummaryGrouping(t *testing.T) {
 	if metadataCount != 1 {
 		t.Errorf("expected 'metadata:' once, got %d:\n%s", metadataCount, summary)
 	}
-	if !strings.Contains(summary, "name: test  # moved to top") {
+	if !strings.Contains(summary, "name: test  # move to top") {
 		t.Errorf("missing first move:\n%s", summary)
 	}
-	if !strings.Contains(summary, "namespace: default  # moved up") {
+	if !strings.Contains(summary, "namespace: default  # move up") {
 		t.Errorf("missing second move:\n%s", summary)
 	}
 }
@@ -226,15 +226,15 @@ func TestFormatSummaryValueKinds(t *testing.T) {
 		{Path: "spec", Keys: []KeyInfo{
 			mappingKey("selector"),
 			sequenceKey("ports"),
-		}, Action: "moved up"},
+		}, Action: "move up"},
 	}
 
 	summary := FormatSummary("test.yaml", descs, nil, 0)
 
-	if !strings.Contains(summary, "selector: {...}  # moved up") {
+	if !strings.Contains(summary, "selector: {...}  # move up") {
 		t.Errorf("mapping value should show {...}:\n%s", summary)
 	}
-	if !strings.Contains(summary, "ports: [...]  # moved up") {
+	if !strings.Contains(summary, "ports: [...]  # move up") {
 		t.Errorf("sequence value should show [...]:\n%s", summary)
 	}
 }
@@ -243,16 +243,16 @@ func TestFormatSummaryMergesSameAction(t *testing.T) {
 	// Two moves at the same path with the same action should merge keys.
 	// Since keys are now on separate lines, both should appear.
 	descs := []MoveDescription{
-		{Path: "spec", Keys: []KeyInfo{scalarKey("port", "8080")}, Action: "moved up"},
-		{Path: "spec", Keys: []KeyInfo{scalarKey("targetPort", "8080")}, Action: "moved up"},
+		{Path: "spec", Keys: []KeyInfo{scalarKey("port", "8080")}, Action: "move up"},
+		{Path: "spec", Keys: []KeyInfo{scalarKey("targetPort", "8080")}, Action: "move up"},
 	}
 
 	summary := FormatSummary("test.yaml", descs, nil, 0)
 
-	if !strings.Contains(summary, "port: 8080  # moved up") {
+	if !strings.Contains(summary, "port: 8080  # move up") {
 		t.Errorf("missing port move:\n%s", summary)
 	}
-	if !strings.Contains(summary, "targetPort: 8080  # moved up") {
+	if !strings.Contains(summary, "targetPort: 8080  # move up") {
 		t.Errorf("missing targetPort move:\n%s", summary)
 	}
 }

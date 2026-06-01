@@ -223,7 +223,7 @@ func WalkAndValidateConfig(node *Node) error {
 
 // WalkFindNullValues walks the config and file trees together, returning errors for any
 // null values in the file where the config expects a non-scalar type (map or sequence).
-// This should be called before WalkAndCompare or WalkAndSort to catch nulls with correct paths.
+// This should be called before WalkAndSort to catch nulls with correct paths.
 func WalkFindNullValues(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
 	switch configNode.Kind {
 	case yaml.DocumentNode:
@@ -278,82 +278,26 @@ func WalkFindNullValues(configNode, fileNode *Node, sortConfs SortConfigs, errs 
 	return errs
 }
 
-// WalkAndCompare walks the tree and does the validation
-func WalkAndCompare(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
+// WalkAndSort walks the tree and sorts the .Content and .NodeContent.
+// Returns validation errors and whether any changes were made.
+func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) (ValidationErrors, bool) {
+	changed := false
 	switch configNode.Kind {
 	case yaml.DocumentNode:
 		if fileNode.Kind != yaml.DocumentNode {
-			return append(errs, fmt.Errorf("program error: expected '%s' to be a Document:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
-		}
-
-		return WalkAndCompare(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
-	case yaml.MappingNode:
-		if fileNode.Kind != yaml.MappingNode {
-			return append(errs, fmt.Errorf("program error: expected '%s' to be a Map:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
-		}
-
-		// do the checks
-		configPairs := GetKeyValuePairs(configNode.NodeContent)
-		filePairs := GetKeyValuePairs(fileNode.NodeContent)
-		errs = checkPairs(configPairs, filePairs, sortConfs, errs)
-
-		// walk and compare
-		for _, configPair := range configPairs {
-			for _, filePair := range filePairs {
-				if filePair.Key != configPair.Key {
-					continue
-				}
-				if configPair.KeyNode.Ditto == "" {
-					errs = WalkAndCompare(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
-				} else {
-					cN, err := configNodeForDitto(configPair, filePair, sortConfs)
-					if err != nil {
-						errs = append(errs, err)
-						break
-					}
-					errs = WalkAndCompare(cN, filePair.ValueNode, sortConfs, errs)
-					break
-				}
-				break
-			}
-		}
-	case yaml.SequenceNode:
-		if fileNode.Kind != yaml.SequenceNode {
-			return append(errs, fmt.Errorf("program error: expected '%s' to be a Sequence:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
-		}
-		for _, fNode := range fileNode.NodeContent {
-			// use the same configNode for each entry in the sequence
-			if len(configNode.NodeContent) > 0 {
-				errs = WalkAndCompare(configNode.NodeContent[0], fNode, sortConfs, errs)
-			}
-		}
-	case yaml.ScalarNode:
-		if fileNode.Kind != yaml.ScalarNode {
-			return append(errs, fmt.Errorf("program error: expected '%s' to be a Scalar:, got: '%s'", GetReferencePath(fileNode, 0, ""), convertKind(fileNode)))
-		}
-	default:
-		return append(errs, fmt.Errorf("did not expect configNode.Kind of: %v", fileNode.Kind))
-	}
-
-	return errs
-}
-
-// WalkAndSort walks the tree and sorts the .Content and .NodeContent
-func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
-	switch configNode.Kind {
-	case yaml.DocumentNode:
-		if fileNode.Kind != yaml.DocumentNode {
-			return append(errs, fmt.Errorf("program error: expected Document: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected Document: '%s'", GetReferencePath(fileNode, 0, ""))), false
 		}
 
 		return WalkAndSort(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
 	case yaml.MappingNode:
 		if fileNode.Kind != yaml.MappingNode {
-			return append(errs, fmt.Errorf("program error: expected Map: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected Map: '%s'", GetReferencePath(fileNode, 0, ""))), false
 		}
 
 		// do the sorting
-		sortNodes(configNode, fileNode, sortConfs)
+		if sortNodes(configNode, fileNode, sortConfs) {
+			changed = true
+		}
 
 		// walk and sort the contents
 		configPairs := GetKeyValuePairs(configNode.NodeContent)
@@ -363,22 +307,26 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 				if filePair.Key != configPair.Key {
 					continue
 				}
+				var childChanged bool
 				if configPair.KeyNode.Ditto == "" {
-					errs = WalkAndSort(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
+					errs, childChanged = WalkAndSort(configPair.ValueNode, filePair.ValueNode, sortConfs, errs)
 				} else {
 					cN, err := configNodeForDitto(configPair, filePair, sortConfs)
 					if err != nil {
 						errs = append(errs, err)
 						break
 					}
-					errs = WalkAndSort(cN, filePair.ValueNode, sortConfs, errs)
+					errs, childChanged = WalkAndSort(cN, filePair.ValueNode, sortConfs, errs)
+				}
+				if childChanged {
+					changed = true
 				}
 				break
 			}
 		}
 	case yaml.SequenceNode:
 		if fileNode.Kind != yaml.SequenceNode {
-			return append(errs, fmt.Errorf("program error: expected Sequence: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected Sequence: '%s'", GetReferencePath(fileNode, 0, ""))), false
 		}
 		// use the same configNode for each entry in the sequence
 		if len(configNode.NodeContent) > 0 &&
@@ -401,7 +349,8 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 				}
 				fileNode.NodeContent = append(fileNode.NodeContent, newNode)
 				fileNode.Content = append(fileNode.Content, newYamlNode)
-				errs = WalkAndSort(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
+				changed = true
+				errs, _ = WalkAndSort(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
 			}
 		} else if len(configNode.NodeContent) > 0 &&
 			configNode.NodeContent[0].Kind == yaml.ScalarNode &&
@@ -417,24 +366,29 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 			}
 			fileNode.NodeContent = append(fileNode.NodeContent, newNode)
 			fileNode.Content = append(fileNode.Content, newYamlNode)
+			changed = true
 		} else {
 			if len(configNode.NodeContent) == 0 {
-				return errs
+				return errs, false
 			}
 			for _, fNode := range fileNode.NodeContent {
-				errs = WalkAndSort(configNode.NodeContent[0], fNode, sortConfs, errs)
+				var childChanged bool
+				errs, childChanged = WalkAndSort(configNode.NodeContent[0], fNode, sortConfs, errs)
+				if childChanged {
+					changed = true
+				}
 			}
 		}
 	case yaml.ScalarNode:
 		if fileNode.Kind != yaml.ScalarNode {
-			return append(errs, fmt.Errorf("program error: expected Scalar: '%s'", GetReferencePath(fileNode, 0, "")))
+			return append(errs, fmt.Errorf("program error: expected Scalar: '%s'", GetReferencePath(fileNode, 0, ""))), false
 		}
 	}
 
-	return errs
+	return errs, changed
 }
 
-func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
+func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) bool {
 	// for each line in the config, put matching file line in new slice
 	newNodeContent := []*Node{}
 	configPairs := GetKeyValuePairs(configNode.NodeContent)
@@ -508,6 +462,17 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 		}
 	}
 
+	// detect if the ordering changed
+	changed := len(newNodeContent) != len(fileNode.NodeContent)
+	if !changed {
+		for i, node := range newNodeContent {
+			if node != fileNode.NodeContent[i] {
+				changed = true
+				break
+			}
+		}
+	}
+
 	fileNode.NodeContent = newNodeContent
 
 	newContent := []*yaml.Node{}
@@ -515,6 +480,8 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) {
 		newContent = append(newContent, node.Node)
 	}
 	fileNode.Content = newContent
+
+	return changed
 }
 
 func getConfigValueNodeForDitto(configPair KeyValuePair, sortConfs SortConfigs) (*Node, error) {
@@ -580,85 +547,6 @@ func GetKeyValuePairs(nodeContent []*Node) []KeyValuePair {
 	}
 
 	return keyValuePairs
-}
-
-// checkPairs checks that fileNode is sometime after the matching node before configNode.
-func checkPairs(configPairs, filePairs []KeyValuePair, sortConfs SortConfigs, errs ValidationErrors) ValidationErrors {
-	// check 'requireds'
-	for _, configPair := range configPairs {
-		found := false
-		for _, filePair := range filePairs {
-			if filePair.Key != configPair.Key {
-				continue
-			}
-			found = true
-		}
-		if !found && configPair.KeyNode.Required && !sortConfs.FileConfigs.IgnoreRequireds {
-			filePath := ""
-			if len(filePairs) == 0 {
-				filePath = GetReferencePath(configPairs[0].KeyNode.ParentNode, 0, "")
-			} else {
-				filePath = GetReferencePath(filePairs[0].KeyNode.ParentNode, 0, "")
-			}
-			path := fmt.Sprintf("%s.%s", filePath, configPair.KeyNode.Value)
-			errs = append(errs, fmt.Errorf("validation error: missing required key '%s'", path))
-		}
-	}
-
-	// for each filePair
-	for _, filePair := range filePairs {
-		// if there's no matching configPair, do nothing
-		found := false
-		cIndex := 0
-		for i, configPair := range configPairs {
-			if configPair.Key == filePair.Key {
-				cIndex = i
-				found = true
-			}
-		}
-		if !found {
-			continue
-		}
-
-		// check 'first'
-		if configPairs[cIndex].KeyNode.MustBeFirst && filePair.KeyNode.Index != 0 {
-			configPath := GetReferencePath(filePair.KeyNode, 0, "")
-			filePath := GetReferencePath(filePairs[0].KeyNode, 0, "")
-			errs = append(errs, fmt.Errorf("validation error: want '%s' to be first, got '%s'", configPath, filePath))
-		}
-
-		// if there is a matching configPair, check the previous configPair,
-		//   and if that doesn't exist, the one before that, etc.
-	ConfigPairsLoop:
-		for {
-			// stop if we've reached the end
-			if configPairs[cIndex].KeyNode.Index == 0 {
-				break
-			}
-
-			// now find the filePair matching the previous configPair to check 'afters'
-			targetFound := false
-			for _, targetFilePair := range filePairs {
-				if targetFilePair.Key != configPairs[cIndex-1].Key {
-					continue
-				}
-				targetFound = true
-				// check 'afters'
-				if filePair.KeyNode.Index < targetFilePair.KeyNode.Index {
-					filePath := GetReferencePath(filePair.KeyNode, 0, "")
-					sisterPath := GetReferencePath(targetFilePair.KeyNode, 0, "")
-					errs = append(errs, fmt.Errorf("validation error: want '%s' to be after '%s', is before", filePath, sisterPath))
-				}
-				break ConfigPairsLoop
-			}
-			if !targetFound {
-				// check previous keyValuePair
-				cIndex--
-			}
-		}
-	}
-
-	return errs
 }
 
 func walkToRootNode(node *Node) *Node {
@@ -802,19 +690,4 @@ func GetValidationErrorStrings(errs ValidationErrors) string {
 	}
 
 	return errorString
-}
-
-func convertKind(node *Node) string {
-	switch node.Kind {
-	case yaml.DocumentNode:
-		return "Document"
-	case yaml.MappingNode:
-		return "Map"
-	case yaml.SequenceNode:
-		return "Sequence"
-	case yaml.ScalarNode:
-		return "Scalar"
-	default:
-		return "Unknown"
-	}
 }

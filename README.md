@@ -261,5 +261,5 @@ go test ./...
 ## Debugging with Delve
 
 ```shell
-dlv test pkg/compare/compare* -- -test.run TestWalkAndCompare
+dlv test pkg/compare/compare* -- -test.run TestWalkAndSort
 ```

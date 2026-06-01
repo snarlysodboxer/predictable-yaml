@@ -80,7 +80,7 @@ func TestIntegrationLint(t *testing.T) {
 			note:           "invalid deployment fails",
 			files:          []string{filepath.Join(repoRoot, "test-data", "deployment.invalid.yaml")},
 			expectFail:     true,
-			expectInOutput: "validation error",
+			expectInOutput: "Changes:",
 		},
 		{
 			note:       "valid service passes",
@@ -91,7 +91,7 @@ func TestIntegrationLint(t *testing.T) {
 			note:           "invalid service fails",
 			files:          []string{filepath.Join(repoRoot, "test-data", "service.invalid.yaml")},
 			expectFail:     true,
-			expectInOutput: "validation error",
+			expectInOutput: "Changes:",
 		},
 		{
 			note: "mixed valid and invalid fails",
@@ -100,7 +100,7 @@ func TestIntegrationLint(t *testing.T) {
 				filepath.Join(repoRoot, "test-data", "service.invalid.yaml"),
 			},
 			expectFail:     true,
-			expectInOutput: "validation error",
+			expectInOutput: "Changes:",
 		},
 		{
 			note:       "directory with invalid files fails",
