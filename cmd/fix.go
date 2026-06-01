@@ -31,18 +31,18 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
-	"github.com/snarlysodboxer/predictable-yaml/pkg/indentation"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/moves"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/whitespace"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // flags
 var (
 	prompt                  bool
 	promptIfLineCountChange bool
-	reduceIndentationBy     int
+	compactLists            bool
+	reduceIndentationBy     int // deprecated, mapped to compactLists
 	indentationLevel        int
 	unmatchedToBeginning    bool
 	addPreferreds           bool
@@ -70,6 +70,11 @@ var fixCmd = &cobra.Command{
 		return nil
 	},
 	Run: func(cmd *cobra.Command, filePaths []string) {
+		// map deprecated --reduce-list-indentation-by to --compact-lists
+		if cmd.Flags().Changed("reduce-list-indentation-by") {
+			compactLists = reduceIndentationBy != 0
+		}
+
 		// setup
 		configDirFlag := ""
 		if cfgDir != "" {
@@ -167,6 +172,9 @@ var fixCmd = &cobra.Command{
 			}
 			encoder := yaml.NewEncoder(&buf)
 			encoder.SetIndent(indentationLevel)
+			if compactLists && !disablePostProcessing {
+				encoder.CompactSeqIndent()
+			}
 			err = encoder.Encode(fileNode.Node)
 			if err != nil {
 				log.Printf("File '%s' has encode errors:\n%v\n", filePath, err)
@@ -175,14 +183,6 @@ var fixCmd = &cobra.Command{
 			fileContents := buf.Bytes()
 
 			if !disablePostProcessing {
-				if reduceIndentationBy != 0 {
-					var err error
-					fileContents, err = indentation.FixLists(fileContents, reduceIndentationBy)
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-				}
 				if preserveComments {
 					fileContents, err = whitespace.PreserveComments(existingFileContents, fileContents)
 					if err != nil {
@@ -256,13 +256,15 @@ func init() {
 	fixCmd.PersistentFlags().BoolVar(&prompt, "prompt", true, "show diff and prompt before making changes")
 	fixCmd.PersistentFlags().BoolVar(&promptIfLineCountChange, "prompt-if-line-count-change", false, "show diff and prompt only if the number of lines changed. overrides '--prompt'.")
 	fixCmd.PersistentFlags().IntVar(&indentationLevel, "indentation-level", 2, "set yaml.v3 indentation spaces")
-	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 2, "reduce indentation level for lists by number")
+	fixCmd.PersistentFlags().BoolVar(&compactLists, "compact-lists", true, "make '- ' count as part of the indentation for list items")
+	fixCmd.PersistentFlags().IntVar(&reduceIndentationBy, "reduce-list-indentation-by", 0, "deprecated: use --compact-lists instead")
+	_ = fixCmd.PersistentFlags().MarkDeprecated("reduce-list-indentation-by", "use --compact-lists instead")
 	fixCmd.PersistentFlags().BoolVar(&unmatchedToBeginning, "unmatched-to-beginning", false, "move keys not in the config to the beginning of their map instead of the end")
 	fixCmd.PersistentFlags().BoolVar(&addPreferreds, "add-preferred", false, "add lines marked as preferred when adding missing keys")
 	fixCmd.PersistentFlags().BoolVar(&validate, "validate", true, "use validation to determine if sorting should happen. (only sort if validation fails. this can prevent whitespace changes when unnecessary.)")
 	fixCmd.PersistentFlags().BoolVar(&preserveEmptyLines, "preserve-empty-lines", true, "preserve empty lines from the original file")
 	fixCmd.PersistentFlags().BoolVar(&preserveComments, "preserve-comments", true, "preserve spaces before comments from the original file")
-	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable preserve-empty-lines, preserve-comments, and reduce-list-indentation-by")
+	fixCmd.PersistentFlags().BoolVarP(&disablePostProcessing, "disable-post-processing", "d", false, "disable preserve-empty-lines, preserve-comments, and compact-lists")
 	fixCmd.PersistentFlags().BoolVar(&disablePostProcessing, "disable-all-experiments", false, "deprecated: use --disable-post-processing")
 	_ = fixCmd.PersistentFlags().MarkDeprecated("disable-all-experiments", "use --disable-post-processing instead")
 }

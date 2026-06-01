@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func parseToNode(t *testing.T, content string) *compare.Node {

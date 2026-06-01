@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestPreserveEmptyLines(t *testing.T) {

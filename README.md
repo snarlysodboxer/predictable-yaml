@@ -138,7 +138,7 @@ predictable-yaml fix --prompt=false my-dir/
 predictable-yaml fix --prompt-if-line-count-change my-dir/
 
 # Use four spaces and more deeply indented lists
-predictable-yaml fix --indentation-level 4 --reduce-list-indentation-by 0 my-dir/
+predictable-yaml fix --indentation-level 4 --compact-lists=false my-dir/
 
 # Disable whitespace preservation and list de-indentation
 predictable-yaml fix -d my-dir/
@@ -170,7 +170,7 @@ export PREDICTABLE_YAML_DIFF="difft"
 - **Structural summary** - Shows a YAML-like summary of what moved and what was added, with comment preservation status.
 - **Preserve empty lines** - Associates empty lines with the YAML key following them and reinserts them after reordering. Reinserts trailing empty lines if present in the original. *(enabled by default, disable with `--preserve-empty-lines=false`)*
 - **Preserve comments** - Replaces comment spacing with the original versions after reordering. *(enabled by default, disable with `--preserve-comments=false`)*
-- **Reduce list indentation** - Adjusts list item indentation so `-` is even with the parent key instead of indented. *(enabled by default, disable with `--reduce-list-indentation-by 0`)*
+- **Compact lists** - Makes `- ` count as part of the indentation for list items, so `-` is even with the parent key instead of indented. *(enabled by default, disable with `--compact-lists=false`)*
 - **Add missing keys** - Adds required keys that are missing from the file. Preferred keys can also be added with `--add-preferred`.
 - **Unmatched key placement** - Keys in the file that aren't in the config are moved to the end of their map by default. Use `--unmatched-to-beginning` to move them to the start instead.
 - **Document marker** - Reinserts `---` at the beginning of the file if it was there before reordering.
@@ -178,7 +178,7 @@ export PREDICTABLE_YAML_DIFF="difft"
 ### Notes
 
 - Recommend starting with a clean git tree so changes can easily be reviewed or undone.
-- Comment preservation may not work well when the fixer also changes indentation from the original. Set `--indentation-level` and `--reduce-list-indentation-by` to match your project's style first.
+- Comment preservation may not work well when the fixer also changes indentation from the original. Set `--indentation-level` and `--compact-lists` to match your project's style first.
 
 ### Known Limitations
 

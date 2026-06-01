@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // KeyInfo holds a key name plus information about its value for display.
