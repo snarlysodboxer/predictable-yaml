@@ -24,7 +24,7 @@ import (
 	"github.com/snarlysodboxer/predictable-yaml/pkg/compare"
 	"github.com/snarlysodboxer/predictable-yaml/pkg/moves"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // lintCmd represents the lint command

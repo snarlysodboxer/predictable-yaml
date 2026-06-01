@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/spf13/cobra v1.10.2
-	gopkg.in/yaml.v3 v3.0.1
+	go.yaml.in/yaml/v3 v3.0.4
 )
 
 require (
