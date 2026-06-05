@@ -24,7 +24,7 @@
         };
         predictable-yaml = pkgs.buildGoModule {
           pname = "predictable-yaml";
-          version = "v1.0.0";
+          version = "v1.0.1";
           src = ./.;
           vendorHash = "sha256-mCFDgWqloouA8Taxss083D1sxhypg0/NTQNKLNuMH3U=";
           env.CGO_ENABLED = "0";

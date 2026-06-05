@@ -1229,6 +1229,32 @@ spec:
           args: []
 `,
 		},
+		{
+			note:         "empty sequence not populated when parent key is not required",
+			toBeginning:  true,
+			expectedErrs: ValidationErrors{},
+			configYamls: []string{
+				`---
+apiVersion: gateway.networking.k8s.io/v1  # first, required
+kind: Gateway  # required
+spec:  # required
+  gatewayClassName: TODO  # first, required
+  listeners:
+  - name: TODO  # first, required
+    port: TODO  # required`},
+			fileYaml: `---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+spec:
+  gatewayClassName: envoy-ingress
+  listeners: []`,
+			expectedYaml: `apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+spec:
+  gatewayClassName: envoy-ingress
+  listeners: []
+`,
+		},
 	}
 
 	for _, tc := range testCases {
