@@ -329,7 +329,25 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 			return append(errs, fmt.Errorf("program error: expected Sequence: '%s'", GetReferencePath(fileNode, 0, ""))), false
 		}
 		// use the same configNode for each entry in the sequence
-		if len(configNode.NodeContent) > 0 &&
+		// Only populate an empty sequence with required/preferred children
+		// if the parent key itself is required or preferred (with --add-preferred).
+		// This avoids adding entries to sequences the user intentionally left empty.
+		parentKeyIsRequired := false
+		parentKeyIsPreferred := false
+		if configNode.ParentNode != nil && configNode.ParentNode.Kind == yaml.MappingNode {
+			for i, n := range configNode.ParentNode.NodeContent {
+				if n.Kind == yaml.ScalarNode && i+1 < len(configNode.ParentNode.NodeContent) &&
+					configNode.ParentNode.NodeContent[i+1] == configNode {
+					parentKeyIsRequired = n.Required
+					parentKeyIsPreferred = n.Preferred
+					break
+				}
+			}
+		}
+		shouldPopulate := (parentKeyIsRequired && !sortConfs.FileConfigs.IgnoreRequireds) ||
+			(parentKeyIsPreferred && sortConfs.AddPreferreds && !sortConfs.FileConfigs.IgnoreRequireds)
+		if shouldPopulate &&
+			len(configNode.NodeContent) > 0 &&
 			configNode.NodeContent[0].Kind == yaml.MappingNode &&
 			len(fileNode.NodeContent) == 0 {
 			hasRequiredValue := false
@@ -352,7 +370,8 @@ func WalkAndSort(configNode, fileNode *Node, sortConfs SortConfigs, errs Validat
 				changed = true
 				errs, _ = WalkAndSort(configNode.NodeContent[0], fileNode.NodeContent[0], sortConfs, errs)
 			}
-		} else if len(configNode.NodeContent) > 0 &&
+		} else if shouldPopulate &&
+			len(configNode.NodeContent) > 0 &&
 			configNode.NodeContent[0].Kind == yaml.ScalarNode &&
 			len(fileNode.NodeContent) == 0 {
 			newYamlNode := &yaml.Node{

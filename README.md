@@ -208,7 +208,7 @@ export PREDICTABLE_YAML_DIFF="difft"
 - **Preserve empty lines** - Associates empty lines with the YAML key following them and reinserts them after reordering. Reinserts trailing empty lines if present in the original.
 - **Preserve comments** - Replaces comment spacing with the original versions after reordering.
 - **Compact lists** - Makes `- ` count as part of the indentation for list items, so `-` is even with the parent key instead of indented. *(enabled by default, disable with `--compact-lists=false`)*
-- **Add missing keys** - Adds required keys that are missing from the file. Preferred keys can also be added with `--add-preferred`.
+- **Add missing keys** - Adds required keys that are missing from the file. Preferred keys can also be added with `--add-preferred`. Empty sequences (`[]`) and empty maps (`{}`) are only populated with required/preferred children when the parent key itself is required (or preferred with `--add-preferred`), so explicitly empty values are left alone.
 - **Unmatched key placement** - Keys in the file that aren't in the config are moved to the end of their map by default. Use `--unmatched-to-beginning` to move them to the start instead.
 - **Document marker** - Reinserts `---` at the beginning of the file if it was there before reordering.
 
