@@ -1327,6 +1327,84 @@ spec:
 	}
 }
 
+func TestAddedFieldPaths(t *testing.T) {
+	configYaml := `---
+apiVersion: rbac.authorization.k8s.io/v1  # first, required
+kind: ClusterRole  # required
+metadata:  # required
+  name: example  # first, required
+  labels:  # required
+    app.kubernetes.io/name: example  # first, required
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get`
+
+	fileYaml := `---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mariadb-operator
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get`
+
+	// Parse config
+	cN := &yaml.Node{}
+	err := yaml.Unmarshal([]byte(configYaml), cN)
+	if err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+	configNode := &Node{Node: cN}
+	WalkConvertYamlNodeToMainNode(configNode)
+	WalkParseLoadConfigComments(configNode)
+	fileConfigs := GetFileConfigs(configNode)
+	configNodes := ConfigNodes{fileConfigs.Kind: configNode}
+
+	// Parse file
+	fN := &yaml.Node{}
+	err = yaml.Unmarshal([]byte(fileYaml), fN)
+	if err != nil {
+		t.Fatalf("failed to parse file: %v", err)
+	}
+	fileNode := &Node{Node: fN}
+	WalkConvertYamlNodeToMainNode(fileNode)
+	fFileConfigs := GetFileConfigs(fileNode)
+
+	addedFields := []AddedField{}
+	sortConfs := SortConfigs{configNodes, fFileConfigs, false, false, &addedFields}
+	_, _ = WalkAndSort(configNodes[fFileConfigs.Kind], fileNode, sortConfs, ValidationErrors{})
+
+	// We expect two added fields: labels under metadata, and
+	// app.kubernetes.io/name under metadata.labels.
+	if len(addedFields) != 2 {
+		t.Fatalf("expected 2 added fields, got %d: %v", len(addedFields), addedFields)
+	}
+
+	// Check that paths are correct
+	for _, field := range addedFields {
+		switch field.Key {
+		case "labels":
+			if field.Path != ".metadata" {
+				t.Errorf("expected labels path '.metadata', got %q", field.Path)
+			}
+		case "app.kubernetes.io/name":
+			if field.Path != ".metadata.labels" {
+				t.Errorf("expected app.kubernetes.io/name path '.metadata.labels', got %q", field.Path)
+			}
+		default:
+			t.Errorf("unexpected added field: %v", field)
+		}
+	}
+}
+
 func TestWalkFindNullValues(t *testing.T) {
 	type testCase struct {
 		note         string
