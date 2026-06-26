@@ -231,10 +231,11 @@ func mergeConsecutiveMoves(moves []moveGroup) []moveGroup {
 
 // summaryNode is a tree node used to build a nested summary display.
 type summaryNode struct {
-	segment  string // path segment, e.g. "metadata", "containers[0]"
-	moves    []MoveDescription
-	added    []string // leaf keys that were added as required fields
-	children []*summaryNode
+	segment    string // path segment, e.g. "metadata", "containers[0]"
+	annotation string // action annotation on the segment heading itself, e.g. "move up", "add"
+	moves      []MoveDescription
+	added      []string // leaf keys that were added as required fields
+	children   []*summaryNode
 }
 
 func (n *summaryNode) findOrCreateChild(segment string) *summaryNode {
@@ -355,13 +356,43 @@ const (
 func renderTree(stringBuilder *strings.Builder, node *summaryNode, indent string, color bool) {
 	// Render this node's segment as a heading if it has one
 	if node.segment != "" {
-		fmt.Fprintf(stringBuilder, "%s%s:\n", indent, node.segment)
+		if node.annotation != "" {
+			comment := fmt.Sprintf("# %s", node.annotation)
+			if color {
+				if node.annotation == "add" {
+					comment = colorYellow + comment + colorReset
+				} else {
+					comment = colorGreen + comment + colorReset
+				}
+			}
+			fmt.Fprintf(stringBuilder, "%s%s:  %s\n", indent, node.segment, comment)
+		} else {
+			fmt.Fprintf(stringBuilder, "%s%s:\n", indent, node.segment)
+		}
 		indent += "  "
+	}
+
+	// Fold move keys and added fields that have matching children:
+	// annotate the child heading instead of rendering a separate line.
+	// Match exact names (e.g. "labels") and indexed names (e.g.
+	// "containers" matches child "containers[0]").
+	findChild := func(key string) *summaryNode {
+		for _, child := range node.children {
+			if child.segment == key || strings.HasPrefix(child.segment, key+"[") {
+				return child
+			}
+		}
+
+		return nil
 	}
 
 	// Render moves at this level - each key on its own line, YAML-style
 	for _, move := range node.moves {
 		for _, keyInfo := range move.Keys {
+			if child := findChild(keyInfo.Key); child != nil {
+				child.annotation = move.Action
+				continue
+			}
 			comment := fmt.Sprintf("# %s", move.Action)
 			if color {
 				comment = colorGreen + comment + colorReset
@@ -372,6 +403,10 @@ func renderTree(stringBuilder *strings.Builder, node *summaryNode, indent string
 
 	// Render added fields at this level
 	for _, key := range node.added {
+		if child := findChild(key); child != nil {
+			child.annotation = "add"
+			continue
+		}
 		comment := "# add"
 		if color {
 			comment = colorYellow + comment + colorReset

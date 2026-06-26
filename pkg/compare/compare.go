@@ -435,7 +435,7 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) bool {
 			}
 			newValueNode := &Node{
 				Node:       newValueYamlNode,
-				ParentNode: fileNode.ParentNode,
+				ParentNode: fileNode,
 			}
 			newKeyYamlNode := &yaml.Node{
 				Kind:  configPair.KeyNode.Node.Kind,
@@ -443,7 +443,7 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) bool {
 			}
 			newKeyNode := &Node{
 				Node:       newKeyYamlNode,
-				ParentNode: fileNode.ParentNode,
+				ParentNode: fileNode,
 			}
 
 			newNodeContent = append(newNodeContent, newKeyNode, newValueNode)
@@ -493,6 +493,10 @@ func sortNodes(configNode, fileNode *Node, sortConfs SortConfigs) bool {
 	}
 
 	fileNode.NodeContent = newNodeContent
+	for i, node := range newNodeContent {
+		node.Index = i
+		node.ParentNode = fileNode
+	}
 
 	newContent := []*yaml.Node{}
 	for _, node := range newNodeContent {

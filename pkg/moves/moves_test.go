@@ -239,6 +239,71 @@ func TestFormatSummaryValueKinds(t *testing.T) {
 	}
 }
 
+func TestFormatSummaryAddedFieldNesting(t *testing.T) {
+	// When a parent field and its child are both added (e.g. metadata.labels
+	// and metadata.labels.app.kubernetes.io/name), the child should be nested
+	// under the parent in the summary, not shown at the root level.
+	added := []compare.AddedField{
+		{Path: ".metadata", Key: "labels"},
+		{Path: ".metadata.labels", Key: "app.kubernetes.io/name"},
+	}
+
+	summary := FormatSummary("test.yaml", nil, added, 0)
+
+	// "app.kubernetes.io/name" should be nested under metadata > labels,
+	// not at the root level (root indent is 4 spaces)
+	for _, line := range strings.Split(summary, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if strings.Contains(line, "app.kubernetes.io/name") {
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+			if indent <= 4 {
+				t.Errorf("app.kubernetes.io/name should not appear at root indent level (indent=%d):\n%s", indent, summary)
+			}
+		}
+	}
+	if !strings.Contains(summary, "metadata:") {
+		t.Errorf("missing metadata heading:\n%s", summary)
+	}
+	// labels should appear as a heading with # add annotation (folded
+	// with its child), not as a separate "labels: TODO" leaf
+	if !strings.Contains(summary, "labels:  # add") {
+		t.Errorf("missing labels heading with add annotation:\n%s", summary)
+	}
+	if !strings.Contains(summary, "app.kubernetes.io/name: TODO") {
+		t.Errorf("missing app.kubernetes.io/name added field:\n%s", summary)
+	}
+}
+
+func TestFormatSummaryMovedKeyWithChildDescriptions(t *testing.T) {
+	// When a key like "containers" appears both as a move target at
+	// path "spec.template.spec" and children exist at
+	// "spec.template.spec.containers[0]", the move annotation should
+	// be folded onto the containers[0] heading, not shown as a
+	// separate line.
+	descs := []MoveDescription{
+		{Path: "spec.template.spec", Keys: []KeyInfo{sequenceKey("containers")}, Action: "move up"},
+		{Path: "spec.template.spec.containers[0]", Keys: []KeyInfo{scalarKey("name", "webhook")}, Action: "move to top"},
+	}
+
+	summary := FormatSummary("test.yaml", descs, nil, 0)
+
+	// The containers move should be folded into the containers[0]
+	// heading with the annotation
+	if !strings.Contains(summary, "containers[0]:  # move up") {
+		t.Errorf("containers[0] should carry the move up annotation:\n%s", summary)
+	}
+	// "containers: [...]  # move up" should NOT appear as a separate line
+	if strings.Contains(summary, "containers: [...]") {
+		t.Errorf("containers should be folded into containers[0], not shown separately:\n%s", summary)
+	}
+	// The child move should still be present
+	if !strings.Contains(summary, "name: webhook  # move to top") {
+		t.Errorf("missing child move:\n%s", summary)
+	}
+}
+
 func TestFormatSummaryMergesSameAction(t *testing.T) {
 	// Two moves at the same path with the same action should merge keys.
 	// Since keys are now on separate lines, both should appear.
